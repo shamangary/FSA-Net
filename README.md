@@ -36,3 +36,27 @@ This paper proposes a method for head pose estimation from a single image. Previ
 + Tensorflow
 + GTX-1080Ti
 + Ubuntu
+
+## Dependencies
++ A guide for most dependencies. (in Chinese)
+http://shamangary.logdown.com/posts/3009851
++ Anaconda
++ OpenCV
++ dlib
++ MTCNN
+
+## Codes
+
+There are three different section of this project. 
+1. Data pre-processing
+2. Training and testing
+We will go through the details in the following sections.
+
+This repository is for 300W-LP, AFLW2000, and BIWI datasets.
+
+
+### 1. Data pre-processing
+(Not done yet!)
+
+### 2. Training and testing
+(Not done yet!)
