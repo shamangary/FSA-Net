@@ -44,6 +44,8 @@ http://shamangary.logdown.com/posts/3009851
 + OpenCV
 + dlib
 + MTCNN
++ Capsule: https://github.com/XifengGuo/CapsNet-Keras
++ Loupe_Keras: https://github.com/shamangary/LOUPE_Keras
 
 ## Codes
 
