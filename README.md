@@ -9,11 +9,14 @@
 (Baseline **Hopenet:** https://github.com/natanielruiz/deep-head-pose)
 <img src="https://github.com/shamangary/FSA-Net/blob/master/Compare_AFLW2000_gt_Hopenet_FSA.gif" height="320"/>
 
-### Time sequence
-<img src="https://github.com/shamangary/FSA-Net/blob/master/time_demo.png" height="160"/>
 
-### Fine-grained structure
-<img src="https://github.com/shamangary/FSA-Net/blob/master/heatmap_demo.png" height="330"/>
+| Time sequence | Fine-grained structure|
+| --- | --- |
+| <img src="https://github.com/shamangary/FSA-Net/blob/master/time_demo.png" height="160"/> | <img src="https://github.com/shamangary/FSA-Net/blob/master/heatmap_demo.png" height="330"/> |
+
+
+
+
 
 ### Results
 <img src="https://github.com/shamangary/FSA-Net/blob/master/FSANET_table1.png" height="220"/><img src="https://github.com/shamangary/FSA-Net/blob/master/FSANET_table2.png" height="220"/><img src="https://github.com/shamangary/FSA-Net/blob/master/FSANET_table3.png" height="220"/>
