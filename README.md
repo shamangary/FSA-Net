@@ -4,7 +4,7 @@
 
 **Code Author: Tsun-Yi Yang**
 
-**Last update: 2019/03/27 (Upload training and testing.)**
+**Last update: 2019/03/27 (Upload training and testing. Not done yet!)**
 
 
 ## Paper
