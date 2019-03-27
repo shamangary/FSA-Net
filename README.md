@@ -1,6 +1,9 @@
 # FSA-Net
 **[CVPR19] FSA-Net: Learning Fine-Grained Structure Aggregation for Head PoseEstimation from a Single Image**
 
+**Code Author: Tsun-Yi Yang**
+
+**Last update: 2019/03/27 (Upload training and testing. Not done yet!)**
 
 ### Comparison video
 <img src="https://github.com/shamangary/FSA-Net/blob/master/Compare_AFLW2000_gt_Hopenet_FSA.gif" height="300"/>
@@ -11,11 +14,6 @@
 ### Fine-grained structure
 <img src="https://github.com/shamangary/FSA-Net/blob/master/heatmap_demo.png" height="330"/>
 
-
-
-**Code Author: Tsun-Yi Yang**
-
-**Last update: 2019/03/27 (Upload training and testing. Not done yet!)**
 
 
 ## Paper
