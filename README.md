@@ -6,7 +6,8 @@
 **Last update: 2019/03/27 (Upload training and testing. Not done yet!)**
 
 ### Comparison video
-<img src="https://github.com/shamangary/FSA-Net/blob/master/Compare_AFLW2000_gt_Hopenet_FSA.gif" height="300"/>
+(Baseline **Hopenet:** https://github.com/natanielruiz/deep-head-pose)
+<img src="https://github.com/shamangary/FSA-Net/blob/master/Compare_AFLW2000_gt_Hopenet_FSA.gif" height="320"/>
 
 ### Time sequence
 <img src="https://github.com/shamangary/FSA-Net/blob/master/time_demo.png" height="160"/>
