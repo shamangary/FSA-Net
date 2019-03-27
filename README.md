@@ -8,6 +8,7 @@
 
 
 ## Paper
+(Working on camera ready version)
 
 ### PDF
 https://github.com/shamangary/SSR-Net/blob/master/ijcai18_ssrnet_pdfa_2b.pdf
