@@ -1,5 +1,5 @@
 # FSA-Net
-**[CVPR19] FSA-Net: Learning Fine-Grained Structure Aggregation for Head PoseEstimation from a Single Image**
+**[CVPR19] FSA-Net: Learning Fine-Grained Structure Aggregation for Head Pose Estimation from a Single Image**
 
 **Code Author: Tsun-Yi Yang**
 
