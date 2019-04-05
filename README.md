@@ -3,7 +3,7 @@
 
 **Code Author: Tsun-Yi Yang**
 
-**Last update: 2019/04/03 (Camera ready version uploaded. Code upload is not finish yet.)**
+**Last update: 2019/04/05 (Camera ready version uploaded. Code upload finished)**
 
 ### Comparison video
 (Baseline **Hopenet:** https://github.com/natanielruiz/deep-head-pose)
