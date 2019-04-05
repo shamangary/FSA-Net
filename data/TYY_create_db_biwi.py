@@ -17,7 +17,7 @@ def get_args():
 	                                 formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 	parser.add_argument("--db", type=str, default='./BIWI',
 	                    help="path to database")
-	parser.add_argument("--output", type=str, default='./BIWI.npz',
+	parser.add_argument("--output", type=str, default='./BIWI_noTrack.npz',
 	                    help="path to output database mat file")
 	parser.add_argument("--img_size", type=int, default=64,
 	                    help="output image size")
