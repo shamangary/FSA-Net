@@ -62,7 +62,7 @@ This repository is for 300W-LP, AFLW2000, and BIWI datasets.
 
 ### 1. Data pre-processing
 
-**[For lazy people just like me]** 
+#### [For lazy people just like me] 
 
 If you don't want to re-download every dataset images and do the pre-processing again, or maybe you don't even care about the data structure in the folder. Just download the file **data.zip** from the following link, and replace the data folder.
 
@@ -70,12 +70,9 @@ If you don't want to re-download every dataset images and do the pre-processing 
 
 Now you can skip to the "Training and testing" stage.
 
-**[Details]** 
+#### [Details]
 
 In the paper, we define **Protocal 1** and **Protocal 2**.
-
-
-(Note that type1 (300W-LP, AFLW2000) datasets have the same image arrangement, and I categorize them as **type1**. It is not about Protocal 1 or 2.)
 
 ```
 
@@ -91,6 +88,18 @@ Training: BIWI(70%)-> BIWI_train.npz
 Testing: BIWI(30%)-> BIWI_test.npz
 
 ```
+(Note that type1 (300W-LP, AFLW2000) datasets have the same image arrangement, and I categorize them as **type1**. It is not about Protocal 1 or 2.)
+
+If you want to do the pre-processing from the beginning, you need to download the dataset first.
+
+#### Download the datasets
+
++ [300W-LP, AFLW2000](http://www.cbsr.ia.ac.cn/users/xiangyuzhu/projects/3DDFA/main.htm)
++ [BIWI](https://data.vision.ee.ethz.ch/cvl/gfanelli/head_pose/head_forest.html)
+
+
+
+
 
 ### 2. Training and testing
 (Not done yet!)
