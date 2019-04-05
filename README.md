@@ -64,7 +64,7 @@ This repository is for 300W-LP, AFLW2000, and BIWI datasets.
 
 **[For lazy people just like me]** 
 
-If you don't want to re-download every dataset images and do the pre-processing again. Just download the file **data.zip** from the following link, and replace the data folder.
+If you don't want to re-download every dataset images and do the pre-processing again, or maybe you don't even care the data structure in the folder. Just download the file **data.zip** from the following link, and replace the data folder.
 
 [Google drive](https://drive.google.com/file/d/1j6GMx33DCcbUOS8J3NHZ-BMHgk7H-oC_/view?usp=sharing)
 
