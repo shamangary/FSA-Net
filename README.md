@@ -64,7 +64,7 @@ This repository is for 300W-LP, AFLW2000, and BIWI datasets.
 
 **[For lazy people just like me]** 
 
-If you don't want to re-download every dataset images and do the pre-processing again, or maybe you don't even care the data structure in the folder. Just download the file **data.zip** from the following link, and replace the data folder.
+If you don't want to re-download every dataset images and do the pre-processing again, or maybe you don't even care about the data structure in the folder. Just download the file **data.zip** from the following link, and replace the data folder.
 
 [Google drive](https://drive.google.com/file/d/1j6GMx33DCcbUOS8J3NHZ-BMHgk7H-oC_/view?usp=sharing)
 
@@ -72,6 +72,25 @@ Now you can skip to the "Training and testing" stage.
 
 **[Details]** 
 
+In the paper, we define **Protocal 1** and **Protocal 2**.
+
+
+(Note that type1 (300W-LP, AFLW2000) datasets have the same image arrangement, and I categorize them as **type1**. It is not about Protocal 1 or 2.)
+
+```
+
+# Protocal 1
+
+Training: 300W-LP (A set of subsets: {AFW.npz, AFW_Flip.npz, HELEN.npz, HELEN_Flip.npz, IBUG.npz, IBUG_Flip.npz, LFPW.npz, LFPW_Flip.npz})
+Testing: AFLW2000.npz or BIWI_noTrack.npz
+
+
+# Protocal 2
+
+Training: BIWI(70%)-> BIWI_train.npz
+Testing: BIWI(30%)-> BIWI_test.npz
+
+```
 
 ### 2. Training and testing
 (Not done yet!)
