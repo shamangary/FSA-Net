@@ -97,6 +97,8 @@ If you want to do the pre-processing from the beginning, you need to download th
 + [300W-LP, AFLW2000](http://www.cbsr.ia.ac.cn/users/xiangyuzhu/projects/3DDFA/main.htm)
 + [BIWI](https://data.vision.ee.ethz.ch/cvl/gfanelli/head_pose/head_forest.html)
 
+Put 300W-LP and AFLW2000 folders under **data/type1/**
+Put BIWI folder under **data/**
 
 #### Run pre-processing
 
