@@ -45,7 +45,6 @@ This paper proposes a method for head pose estimation from a single image. Previ
 http://shamangary.logdown.com/posts/3009851
 + Anaconda
 + OpenCV
-+ dlib
 + MTCNN
 + Capsule: https://github.com/XifengGuo/CapsNet-Keras
 + Loupe_Keras: https://github.com/shamangary/LOUPE_Keras
