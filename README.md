@@ -116,4 +116,15 @@ python TYY_create_db_biwi_70_30.py
 
 
 ### 2. Training and testing
-(Not done yet!)
+
+```
+
+# Training
+sh run_fsanet_train.sh
+
+# Testing
+sh run_fsanet_test.sh
+
+```
+
+Just remember to check which model type you want in the shell script and you are good to go.
