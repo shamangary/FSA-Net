@@ -98,7 +98,21 @@ If you want to do the pre-processing from the beginning, you need to download th
 + [BIWI](https://data.vision.ee.ethz.ch/cvl/gfanelli/head_pose/head_forest.html)
 
 
+#### Run pre-processing
 
+```
+# For 300W-LP and AFLW2000 datasets
+
+cd data/type1
+sh run_created_db_type1.sh
+
+
+# For BIWI dataset
+
+cd data
+python TYY_create_db_biwi.py
+python TYY_create_db_biwi_70_30.py
+```
 
 
 ### 2. Training and testing
