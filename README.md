@@ -127,4 +127,4 @@ sh run_fsanet_test.sh
 
 ```
 
-Just remember to check which model type you want in the shell script and you are good to go.
+Just remember to check which model type you want to use in the shell script and you are good to go.
