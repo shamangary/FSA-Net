@@ -61,7 +61,14 @@ This repository is for 300W-LP, AFLW2000, and BIWI datasets.
 
 
 ### 1. Data pre-processing
-(Not done yet!)
+
+**[For lazy people just like me]** If you don't want to re-download every dataset images and do the pre-processing again. Just download the file **data.zip** from the following link, and replace the data folder.
+[Google drive](https://drive.google.com/file/d/1j6GMx33DCcbUOS8J3NHZ-BMHgk7H-oC_/view?usp=sharing)
+
+Now you can skip to the "Training and testing" stage.
+
+**[Details]** 
+
 
 ### 2. Training and testing
 (Not done yet!)
