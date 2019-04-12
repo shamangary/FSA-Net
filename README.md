@@ -3,7 +3,7 @@
 
 **Code Author: Tsun-Yi Yang**
 
-**Last update: 2019/04/05 (Camera ready version uploaded. Code upload finished)**
+**Last update: 2019/04/12 (Environment details update)**
 
 ### Comparison video
 (Baseline **Hopenet:** https://github.com/natanielruiz/deep-head-pose)
@@ -50,6 +50,8 @@ tensorflow-base           1.10.0          mkl_py35h3c3e929_0
 tensorflow-gpu            1.10.0               hf154084_0    anaconda
 cudnn                     7.1.3                 cuda8.0_0  
 cuda80                    1.0                           0    soumith
+numpy                     1.15.2          py35_blas_openblashd3ea46f_0  [blas_openblas]  conda-forge
+numpy-base                1.14.3           py35h2b20989_0  
 ```
 
 ## Dependencies
