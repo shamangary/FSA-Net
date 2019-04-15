@@ -147,9 +147,13 @@ Just remember to check which model type you want to use in the shell script and 
 ### 3. Demo
 
 You need a **webcam** to correctly process the demo file.
+
+
 Note the the center of the color axes is the detected face center.
 Ideally, each frame should have new face detection results.
 However, if the face detection fails, the previous detection results will be used to estimate poses.
+
+
 LBP is fast enough for real-time face detection, while MTCNN is much more accurate but slow.
 ```
 # LBP face detector (fast but often miss detecting faces)
