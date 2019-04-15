@@ -15,11 +15,9 @@ from keras.engine.topology import Layer
 from keras import activations, initializers, regularizers, constraints
 import tensorflow as tf
 from capsulelayers import *
-from SpatialPyramidPooling import *
 
 from keras.layers.advanced_activations import PReLU
 from utils import get_initial_weights
-from layers import BilinearInterpolation
 from keras.layers.recurrent import *
 from keras.layers.wrappers import *
 import loupe_keras as lpk
