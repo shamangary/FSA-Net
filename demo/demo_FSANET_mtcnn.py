@@ -94,7 +94,7 @@ def main():
     time_network = 0
     time_plot = 0
     skip_frame = 5 # every 5 frame do 1 detection and network forward propagation
-    ad = 0.5
+    ad = 0.6
 
     #Parameters
     num_capsule = 3
