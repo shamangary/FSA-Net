@@ -142,3 +142,16 @@ sh run_fsanet_test.sh
 ```
 
 Just remember to check which model type you want to use in the shell script and you are good to go.
+
+
+### 1. Demo
+
+```
+# LBP face detector (fast but often miss detecting faces)
+cd demo
+sh run_demo_FSANET.sh
+
+# MTCNN face detector (slow but accurate)
+cd demo
+sh run_demo_FSANET_mtcnn.sh
+```
