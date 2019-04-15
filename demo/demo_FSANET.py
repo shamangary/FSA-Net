@@ -9,7 +9,7 @@ from moviepy.editor import *
 from FSANET_model import *
 from moviepy.editor import *
 
-def draw_axis(img, yaw, pitch, roll, tdx=None, tdy=None, size = 50):
+def draw_axis(img, yaw, pitch, roll, tdx=None, tdy=None, size = 80):
 
     pitch = pitch * np.pi / 180
     yaw = -(yaw * np.pi / 180)
