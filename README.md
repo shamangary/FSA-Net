@@ -10,7 +10,7 @@
 <img src="https://github.com/shamangary/FSA-Net/blob/master/Compare_AFLW2000_gt_Hopenet_FSA.gif" height="320"/>
 
 ### Webcam demo
-<img src="https://github.com/shamangary/FSA-Net/blob/master/pose_demo.gif" height="250"/>
+<img src="https://github.com/shamangary/FSA-Net/blob/master/webcam_demo.gif" height="250"/>
 
 
 | Time sequence | Fine-grained structure|
