@@ -45,7 +45,6 @@ def main():
     args = get_args()
     train_db_name = '300W_LP'
     # train_db_name = 'BIWI'
-    # train_db_name = 'synhead_noBIWI'
     model_type = args.model_type
     
     image_size = 64
