@@ -146,6 +146,8 @@ Just remember to check which model type you want to use in the shell script and 
 
 ### 3. Demo
 
+You need a **webcam** to correctly process the demo file.
+
 ```
 # LBP face detector (fast but often miss detecting faces)
 cd demo
