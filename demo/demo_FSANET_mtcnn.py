@@ -6,6 +6,7 @@ from math import cos, sin
 from moviepy.editor import *
 from FSANET_model import *
 from moviepy.editor import *
+from mtcnn.mtcnn import MTCNN
 
 def draw_axis(img, yaw, pitch, roll, tdx=None, tdy=None, size = 50):
 
@@ -40,34 +41,34 @@ def draw_axis(img, yaw, pitch, roll, tdx=None, tdy=None, size = 50):
 
     return img
     
-def draw_results(detected,input_img,faces,ad,img_size,img_w,img_h,model,time_detection,time_network,time_plot):
+def draw_results_mtcnn(detected,input_img,faces,ad,img_size,img_w,img_h,model,time_detection,time_network,time_plot):
     
     if len(detected) > 0:
-        for i, (x,y,w,h) in enumerate(detected):
+        for i, d in enumerate(detected):
             #x1, y1, x2, y2, w, h = d.left(), d.top(), d.right() + 1, d.bottom() + 1, d.width(), d.height()
-            
-            x1 = x
-            y1 = y
-            x2 = x+w
-            y2 = y+h
+            if d['confidence'] > 0.95:
+                x1,y1,w,h = d['box']
+                
+                x2 = x1+w
+                y2 = y1+h
 
-            xw1 = max(int(x1 - ad * w), 0)
-            yw1 = max(int(y1 - ad * h), 0)
-            xw2 = min(int(x2 + ad * w), img_w - 1)
-            yw2 = min(int(y2 + ad * h), img_h - 1)
-            
-            faces[i,:,:,:] = cv2.resize(input_img[yw1:yw2 + 1, xw1:xw2 + 1, :], (img_size, img_size))
-            faces[i,:,:,:] = cv2.normalize(faces[i,:,:,:], None, alpha=0, beta=255, norm_type=cv2.NORM_MINMAX)        
-            
-            face = np.expand_dims(faces[i,:,:,:], axis=0)
-            p_result = model.predict(face)
-            
-            face = face.squeeze()
-            img = draw_axis(input_img[yw1:yw2 + 1, xw1:xw2 + 1, :], p_result[0][0], p_result[0][1], p_result[0][2])
-            
-            input_img[yw1:yw2 + 1, xw1:xw2 + 1, :] = img
-            
-            cv2.imshow("result", input_img)
+                xw1 = max(int(x1 - ad * w), 0)
+                yw1 = max(int(y1 - ad * h), 0)
+                xw2 = min(int(x2 + ad * w), img_w - 1)
+                yw2 = min(int(y2 + ad * h), img_h - 1)
+                
+                faces[i,:,:,:] = cv2.resize(input_img[yw1:yw2 + 1, xw1:xw2 + 1, :], (img_size, img_size))
+                faces[i,:,:,:] = cv2.normalize(faces[i,:,:,:], None, alpha=0, beta=255, norm_type=cv2.NORM_MINMAX)        
+                
+                face = np.expand_dims(faces[i,:,:,:], axis=0)
+                p_result = model.predict(face)
+                
+                face = face.squeeze()
+                img = draw_axis(input_img[yw1:yw2 + 1, xw1:xw2 + 1, :], p_result[0][0], p_result[0][1], p_result[0][2])
+                
+                input_img[yw1:yw2 + 1, xw1:xw2 + 1, :] = img
+                
+                cv2.imshow("result", input_img)
     else:
         cv2.imshow("result", input_img)
 
@@ -79,8 +80,9 @@ def main():
     except OSError:
         pass
 
-    face_cascade = cv2.CascadeClassifier('lbpcascade_frontalface_improved.xml')
-    
+    # face_cascade = cv2.CascadeClassifier('lbpcascade_frontalface_improved.xml')
+    detector = MTCNN()
+
     # load model and weights
     img_size = 64
     stage_num = [3,3,3]
@@ -92,7 +94,7 @@ def main():
     time_network = 0
     time_plot = 0
     skip_frame = 5 # every 5 frame do 1 detection and network forward propagation
-    ad = 0.6
+    ad = 0.5
 
     #Parameters
     num_capsule = 3
@@ -157,18 +159,19 @@ def main():
             
             # detect faces using LBP detector
             gray_img = cv2.cvtColor(input_img,cv2.COLOR_BGR2GRAY)
-            detected = face_cascade.detectMultiScale(gray_img, 1.1)
-            
+            # detected = face_cascade.detectMultiScale(gray_img, 1.1)
+            detected = detector.detect_faces(input_img)
+
             if len(detected_pre) > 0 and len(detected) == 0:
                 detected = detected_pre
 
             faces = np.empty((len(detected), img_size, img_size, 3))
 
-            input_img = draw_results(detected,input_img,faces,ad,img_size,img_w,img_h,model,time_detection,time_network,time_plot)
+            input_img = draw_results_mtcnn(detected,input_img,faces,ad,img_size,img_w,img_h,model,time_detection,time_network,time_plot)
             cv2.imwrite('img/'+str(img_idx)+'.png',input_img)
             
         else:
-            input_img = draw_results(detected,input_img,faces,ad,img_size,img_w,img_h,model,time_detection,time_network,time_plot)
+            input_img = draw_results_mtcnn(detected,input_img,faces,ad,img_size,img_w,img_h,model,time_detection,time_network,time_plot)
 
 
         if len(detected) > len(detected_pre) or img_idx%(skip_frame*3) == 0:
