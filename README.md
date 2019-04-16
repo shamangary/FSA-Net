@@ -10,7 +10,10 @@
 <img src="https://github.com/shamangary/FSA-Net/blob/master/Compare_AFLW2000_gt_Hopenet_FSA.gif" height="320"/>
 
 ### Webcam demo
-<img src="https://github.com/shamangary/FSA-Net/blob/master/webcam_demo.gif" height="250"/>
+
+| Signle person (LBP) | Multiple people (MTCNN)|
+| --- | --- |
+| <img src="https://github.com/shamangary/FSA-Net/blob/master/webcam_demo.gif" height="220"/> | <img src="https://github.com/shamangary/FSA-Net/blob/master/webcam_demo_cvlab_citi.gif" height="220"/> |
 
 
 | Time sequence | Fine-grained structure|
