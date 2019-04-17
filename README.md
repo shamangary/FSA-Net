@@ -66,6 +66,9 @@ http://shamangary.logdown.com/posts/3009851
 + Anaconda
 + OpenCV
 + MTCNN
+```
+pip3 install mtcnn
+```
 + Capsule: https://github.com/XifengGuo/CapsNet-Keras
 + Loupe_Keras: https://github.com/shamangary/LOUPE_Keras
 
