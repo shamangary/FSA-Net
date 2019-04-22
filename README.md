@@ -77,6 +77,7 @@ pip3 install mtcnn
 There are three different section of this project. 
 1. Data pre-processing
 2. Training and testing
+3. Demo
 We will go through the details in the following sections.
 
 This repository is for 300W-LP, AFLW2000, and BIWI datasets.
