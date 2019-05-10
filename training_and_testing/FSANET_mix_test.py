@@ -42,6 +42,8 @@ def get_args():
 
 def main():
     K.clear_session()
+    K.set_learning_phase(0) # make sure its testing mode
+    
     args = get_args()
     # train_db_name = '300W_LP'
     train_db_name = 'BIWI'
