@@ -8,6 +8,7 @@ from math import cos, sin
 from moviepy.editor import *
 from FSANET_model import *
 from moviepy.editor import *
+from keras import backend as K
 
 def draw_axis(img, yaw, pitch, roll, tdx=None, tdy=None, size = 80):
 
@@ -80,7 +81,8 @@ def main():
         os.mkdir('./img')
     except OSError:
         pass
-
+    
+    K.set_learning_phase(0) # make sure its testing mode
     face_cascade = cv2.CascadeClassifier('lbpcascade_frontalface_improved.xml')
     
     # load model and weights
