@@ -48,8 +48,8 @@ This paper proposes a method for head pose estimation from a single image. Previ
 ```
 python                    3.5.6                hc3d631a_0  
 keras-applications        1.0.4                    py35_1    anaconda
-keras-base                2.2.2                    py35_0    anaconda
-keras-gpu                 2.2.2                         0    anaconda
+keras-base                2.1.0                    py35_0    anaconda
+keras-gpu                 2.1.0                         0    anaconda
 keras-preprocessing       1.0.2                    py35_1    anaconda
 tensorflow                1.10.0          mkl_py35heddcb22_0  
 tensorflow-base           1.10.0          mkl_py35h3c3e929_0  
