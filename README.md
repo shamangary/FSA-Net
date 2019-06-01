@@ -96,17 +96,17 @@ Now you can skip to the "Training and testing" stage.
 
 #### [Details]
 
-In the paper, we define **Protocal 1** and **Protocal 2**.
+In the paper, we define **Protocol 1** and **Protocol 2**.
 
 ```
 
-# Protocal 1
+# Protocol 1
 
 Training: 300W-LP (A set of subsets: {AFW.npz, AFW_Flip.npz, HELEN.npz, HELEN_Flip.npz, IBUG.npz, IBUG_Flip.npz, LFPW.npz, LFPW_Flip.npz})
 Testing: AFLW2000.npz or BIWI_noTrack.npz
 
 
-# Protocal 2
+# Protocol 2
 
 Training: BIWI(70%)-> BIWI_train.npz
 Testing: BIWI(30%)-> BIWI_test.npz
