@@ -3,7 +3,7 @@
 
 **Code Author: Tsun-Yi Yang**
 
-**Last update: 2019/04/15 (Demo uploaded)**
+**Last update: 2019/08/07 (Modules explanations)**
 
 ### Comparison video
 (Baseline **Hopenet:** https://github.com/natanielruiz/deep-head-pose)
@@ -175,3 +175,38 @@ sh run_demo_FSANET.sh
 cd demo
 sh run_demo_FSANET_mtcnn.sh
 ```
+
+
+
+### Modules explanation:
+
+1. ssr_G_model_build:
+https://github.com/shamangary/FSA-Net/blob/master/training_and_testing/FSANET_model.py#L672
+
++ Two-stream structure for extracting the features.
+
+2. ssr_feat_S_model_build:
+https://github.com/shamangary/FSA-Net/blob/master/training_and_testing/FSANET_model.py#L765
+
++ Generating fine-grained structure mapping from different scoring functions.
+
+3. ssr_S_model_build:
+https://github.com/shamangary/FSA-Net/blob/master/training_and_testing/FSANET_model.py#L778
+
++ Apply the mapping on to the features and generate primary capsules.
+
+4. ssr_Cap_model_build:
+https://github.com/shamangary/FSA-Net/blob/master/training_and_testing/FSANET_model.py#L820
+
++ Feed the primary capsules into capsule layer and output the final aggregated capsule features. And divide them into 3 parts.
+
+5. ssr_F_model_build:
+https://github.com/shamangary/FSA-Net/blob/master/training_and_testing/FSANET_model.py#L846
+
++ Taking the previous 3 part features for Soft-stagewise regression (SSR) module. Including prediction, dynamic index shifting, and dynamic scaling. This part please check the '[IJCAI18] SSR-Net' for more detail explanation.
+
+6. SSR_module:
+https://github.com/shamangary/FSA-Net/blob/master/training_and_testing/FSANET_model.py#L891
+
++ Taking the prediction, dynamic index shifting, and dynamic scaling for the final regression output.
+In this case, there are three outputs (yaw, pitch, roll).
