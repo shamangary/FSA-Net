@@ -203,7 +203,7 @@ https://github.com/shamangary/FSA-Net/blob/master/training_and_testing/FSANET_mo
 5. ssr_F_model_build:
 https://github.com/shamangary/FSA-Net/blob/master/training_and_testing/FSANET_model.py#L846
 
-+ Taking the previous 3 stages features for Soft-Stagewise Regression (SSR) module. Each stage are further splited into three parts: prediction, dynamic index shifting, and dynamic scaling. This part please check the '[IJCAI18] SSR-Net' for more detail explanation.
++ Taking the previous 3 stages features for Soft-Stagewise Regression (SSR) module. Each stage further splits into three parts: prediction, dynamic index shifting, and dynamic scaling. This part please check the '[IJCAI18] SSR-Net' for more detail explanation.
 
 6. SSR_module:
 https://github.com/shamangary/FSA-Net/blob/master/training_and_testing/FSANET_model.py#L891
