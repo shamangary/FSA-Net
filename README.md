@@ -148,6 +148,7 @@ python TYY_create_db_biwi_70_30.py
 sh run_fsanet_train.sh
 
 # Testing
+# Note that we calculate the MAE of yaw, pitch, roll independently, and average them as one single MAE for evaluation.
 sh run_fsanet_test.sh
 
 ```
