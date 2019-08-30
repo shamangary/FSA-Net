@@ -167,7 +167,8 @@ However, if the face detection fails, the previous detection results will be use
 
 
 LBP is fast enough for real-time face detection, while MTCNN is much more accurate but slow.
-(2019/08/30 update!) SSD face detection is robust and fast!
+
+(2019/08/30 update!) SSD face detection is robust and fast! I borrow some face detector code from https://www.pyimagesearch.com
 ```
 # LBP face detector (fast but often miss detecting faces)
 cd demo
