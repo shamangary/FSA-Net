@@ -3,7 +3,7 @@
 
 **Code Author: Tsun-Yi Yang**
 
-**Last update: 2019/08/07 (Modules explanations)**
+**Last update: 2019/08/30 (Demo update! Robust and fast SSD face detector added!)**
 
 ### Comparison video
 (Baseline **Hopenet:** https://github.com/natanielruiz/deep-head-pose)
@@ -167,6 +167,7 @@ However, if the face detection fails, the previous detection results will be use
 
 
 LBP is fast enough for real-time face detection, while MTCNN is much more accurate but slow.
+(2019/08/30 update!) SSD face detection is robust and fast!
 ```
 # LBP face detector (fast but often miss detecting faces)
 cd demo
@@ -175,6 +176,10 @@ sh run_demo_FSANET.sh
 # MTCNN face detector (slow but accurate)
 cd demo
 sh run_demo_FSANET_mtcnn.sh
+
+# SSD face detector (fast and accurate)
+cd demo
+sh run_demo_FSANET_ssd.sh
 ```
 
 
