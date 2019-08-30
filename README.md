@@ -9,6 +9,9 @@
 (Baseline **Hopenet:** https://github.com/natanielruiz/deep-head-pose)
 <img src="https://github.com/shamangary/FSA-Net/blob/master/Compare_AFLW2000_gt_Hopenet_FSA.gif" height="320"/>
 
+### (New!!!) Fast and robust demo with SSD face detector (2019/08/30)
+<img src="https://github.com/shamangary/FSA-Net/blob/master/FSA%20demo%20with%20SSD%20detector.gif" height="300"/>
+
 ### Webcam demo
 
 | Signle person (LBP) | Multiple people (MTCNN)|
