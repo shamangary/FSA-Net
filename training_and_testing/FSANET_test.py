@@ -17,9 +17,11 @@ from keras.utils import plot_model
 from keras import backend as K
 from keras.layers import *
 
+_TRAIN_DB_300W_LP = "300W_LP"
+_TRAIN_DB_BIWI = "BIWI"
+
 def load_data_npz(npz_path):
     d = np.load(npz_path)
-
     return d["image"], d["pose"]
 
 def mk_dir(dir):
@@ -28,12 +30,21 @@ def mk_dir(dir):
     except OSError:
         pass
 
+def get_weights_file_path(use_pretrained, train_db_name, save_name):
+    prefix = "../pre-trained/" if use_pretrained else ""
+    return prefix + train_db_name+"_models/"+save_name+"/"+save_name+".h5"    
 
 def get_args():
     parser = argparse.ArgumentParser(description="This script tests the CNN model for head pose estimation.",
                                      formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument("--model_type", type=int, default=3,
+    parser.add_argument("--model_type", type=int, default=3, 
                         help="type of model")
+    parser.add_argument('--use_pretrained', required=False,
+                        dest='use_pretrained',
+                        action='store_true')
+    parser.add_argument("--train_db", choices=[_TRAIN_DB_300W_LP, _TRAIN_DB_BIWI], required=False, default=_TRAIN_DB_300W_LP)
+
+    parser.set_defaults(use_pretrained=False)
 
     args = parser.parse_args()
     return args
@@ -45,15 +56,16 @@ def main():
     K.set_learning_phase(0) # make sure its testing mode
     
     args = get_args()
-    train_db_name = '300W_LP'
-    # train_db_name = 'BIWI'
+    
     model_type = args.model_type
+    train_db_name = args.train_db
+    use_pretrained = args.use_pretrained
     
     image_size = 64
 
-    if train_db_name == '300W_LP':
+    if train_db_name == _TRAIN_DB_300W_LP:
         test_db_list = [1,2]
-    elif train_db_name == 'BIWI':
+    elif train_db_name == _TRAIN_DB_BIWI:
         test_db_list = [2]
 
     for test_db_type in test_db_list:
@@ -63,12 +75,12 @@ def main():
             image, pose = load_data_npz('../data/type1/AFLW2000.npz')
         elif test_db_type == 2:
             test_db_name = 'BIWI'
-            if train_db_name == '300W_LP':
+            if train_db_name == _TRAIN_DB_300W_LP:
                 image, pose = load_data_npz('../data/BIWI_noTrack.npz')
-            elif train_db_name == 'BIWI':
+            elif train_db_name == _TRAIN_DB_BIWI:
                 image, pose = load_data_npz('../data/BIWI_test.npz')
         
-        if train_db_name == '300W_LP':
+        if train_db_name == _TRAIN_DB_300W_LP:
             # we only care the angle between [-99,99] and filter other angles
             x_data = []
             y_data = []
@@ -407,15 +419,15 @@ def main():
             save_name3 = 'fsanet_noS_netvlad_fc'+str_S_set
             save_name = 'fusion_fc_netvlad'
 
-        if model_type <15:
-            weight_file = train_db_name+"_models/"+save_name+"/"+save_name+".h5"
+        if model_type <15:            
+            weight_file = get_weights_file_path(use_pretrained, train_db_name, save_name)
             model.load_weights(weight_file)
-        else:
-            weight_file1 = train_db_name+"_models/"+save_name1+"/"+save_name1+".h5"
-            model1.load_weights(weight_file1)
-            weight_file2 = train_db_name+"_models/"+save_name2+"/"+save_name2+".h5"
-            model2.load_weights(weight_file2)
-            weight_file3 = train_db_name+"_models/"+save_name3+"/"+save_name3+".h5"
+        else:            
+            weight_file1 = get_weights_file_path(use_pretrained, train_db_name, save_name1)
+            model1.load_weights(weight_file1)            
+            weight_file2 = get_weights_file_path(use_pretrained, train_db_name, save_name2)
+            model2.load_weights(weight_file2)            
+            weight_file3 = get_weights_file_path(use_pretrained, train_db_name, save_name3)
             model3.load_weights(weight_file3)
             inputs = Input(shape=(64,64,3))
             x1 = model1(inputs)
