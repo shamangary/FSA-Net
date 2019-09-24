@@ -1,24 +1,31 @@
-import pandas as pd
+import os
+import sys
 import logging
 import argparse
-import os
-from keras.callbacks import LearningRateScheduler, ModelCheckpoint
-from keras.optimizers import SGD, Adam
-from keras.utils import np_utils
-from FSANET_model import *
-import sys
+
 import numpy as np
-from keras.preprocessing.image import ImageDataGenerator
-import TYY_callbacks
-from keras.preprocessing.image import ImageDataGenerator
-from TYY_generators import *
-from keras.utils import plot_model
-# import cv2
+import pandas as pd
+
 from keras import backend as K
 from keras.layers import *
+from keras.utils import plot_model
+from keras.utils import np_utils
+from keras.optimizers import SGD, Adam
+from keras.preprocessing.image import ImageDataGenerator
+from keras.callbacks import LearningRateScheduler, ModelCheckpoint
+
+from FSANET_model import *
+
+import TYY_callbacks
+from TYY_generators import *
 
 _TRAIN_DB_300W_LP = "300W_LP"
 _TRAIN_DB_BIWI = "BIWI"
+
+_TEST_DB_AFLW = "AFLW2000"
+_TEST_DB_BIWI = "BIWI"
+
+_IMAGE_SIZE = 64
 
 def load_data_npz(npz_path):
     d = np.load(npz_path)
@@ -49,8 +56,6 @@ def get_args():
     args = parser.parse_args()
     return args
 
-
-
 def main():
     K.clear_session()
     K.set_learning_phase(0) # make sure its testing mode
@@ -59,22 +64,19 @@ def main():
     
     model_type = args.model_type
     train_db_name = args.train_db
-    use_pretrained = args.use_pretrained
+    use_pretrained = args.use_pretrained   
     
-    image_size = 64
 
     if train_db_name == _TRAIN_DB_300W_LP:
-        test_db_list = [1,2]
+        test_db_list = [_TEST_DB_AFLW, _TEST_DB_BIWI]
     elif train_db_name == _TRAIN_DB_BIWI:
-        test_db_list = [2]
+        test_db_list = [_TEST_DB_BIWI]
 
-    for test_db_type in test_db_list:
+    for test_db_name in test_db_list:
 
-        if test_db_type == 1:
-            test_db_name = 'AFLW2000'
+        if test_db_name == _TEST_DB_AFLW:            
             image, pose = load_data_npz('../data/type1/AFLW2000.npz')
-        elif test_db_type == 2:
-            test_db_name = 'BIWI'
+        elif test_db_name == _TEST_DB_BIWI:            
             if train_db_name == _TRAIN_DB_300W_LP:
                 image, pose = load_data_npz('../data/BIWI_noTrack.npz')
             elif train_db_name == _TRAIN_DB_BIWI:
@@ -101,11 +103,11 @@ def main():
         num_classes = 3
 
         if model_type == 0:
-            model = SSR_net_ori_MT(image_size, num_classes, stage_num, lambda_d)()
+            model = SSR_net_ori_MT(_IMAGE_SIZE, num_classes, stage_num, lambda_d)()
             save_name = 'ssrnet_ori_mt'
 
         elif model_type == 1:
-            model = SSR_net_MT(image_size, num_classes, stage_num, lambda_d)()
+            model = SSR_net_MT(_IMAGE_SIZE, num_classes, stage_num, lambda_d)()
             save_name = 'ssrnet_mt'
 
         elif model_type == 2:
@@ -118,7 +120,7 @@ def main():
             S_set = [num_capsule, dim_capsule, routings, num_primcaps, m_dim]
             str_S_set = ''.join('_'+str(x) for x in S_set)
 
-            model = FSA_net_Capsule(image_size, num_classes, stage_num, lambda_d, S_set)()
+            model = FSA_net_Capsule(_IMAGE_SIZE, num_classes, stage_num, lambda_d, S_set)()
             save_name = 'fsanet_capsule'+str_S_set
         
         elif model_type == 3:
@@ -131,7 +133,7 @@ def main():
             S_set = [num_capsule, dim_capsule, routings, num_primcaps, m_dim]
             str_S_set = ''.join('_'+str(x) for x in S_set)
 
-            model = FSA_net_Var_Capsule(image_size, num_classes, stage_num, lambda_d, S_set)()
+            model = FSA_net_Var_Capsule(_IMAGE_SIZE, num_classes, stage_num, lambda_d, S_set)()
             save_name = 'fsanet_var_capsule'+str_S_set
         elif model_type == 4:
             num_capsule = 3
@@ -143,7 +145,7 @@ def main():
             S_set = [num_capsule, dim_capsule, routings, num_primcaps, m_dim]
             str_S_set = ''.join('_'+str(x) for x in S_set)
 
-            model = FSA_net_NetVLAD(image_size, num_classes, stage_num, lambda_d, S_set)()
+            model = FSA_net_NetVLAD(_IMAGE_SIZE, num_classes, stage_num, lambda_d, S_set)()
             save_name = 'fsanet_netvlad'+str_S_set
         elif model_type == 5:
             num_capsule = 3
@@ -155,7 +157,7 @@ def main():
             S_set = [num_capsule, dim_capsule, routings, num_primcaps, m_dim]
             str_S_set = ''.join('_'+str(x) for x in S_set)
 
-            model = FSA_net_Var_NetVLAD(image_size, num_classes, stage_num, lambda_d, S_set)()
+            model = FSA_net_Var_NetVLAD(_IMAGE_SIZE, num_classes, stage_num, lambda_d, S_set)()
             save_name = 'fsanet_var_netvlad'+str_S_set
         elif model_type == 6:
             num_capsule = 3
@@ -167,7 +169,7 @@ def main():
             S_set = [num_capsule, dim_capsule, routings, num_primcaps, m_dim]
             str_S_set = ''.join('_'+str(x) for x in S_set)
 
-            model = FSA_net_noS_Capsule(image_size, num_classes, stage_num, lambda_d, S_set)()
+            model = FSA_net_noS_Capsule(_IMAGE_SIZE, num_classes, stage_num, lambda_d, S_set)()
             save_name = 'fsanet_noS_capsule'+str_S_set
         elif model_type == 7:
             num_capsule = 3
@@ -179,7 +181,7 @@ def main():
             S_set = [num_capsule, dim_capsule, routings, num_primcaps, m_dim]
             str_S_set = ''.join('_'+str(x) for x in S_set)
 
-            model = FSA_net_noS_NetVLAD(image_size, num_classes, stage_num, lambda_d, S_set)()
+            model = FSA_net_noS_NetVLAD(_IMAGE_SIZE, num_classes, stage_num, lambda_d, S_set)()
             save_name = 'fsanet_noS_netvlad'+str_S_set
         
         elif model_type == 8:
@@ -192,7 +194,7 @@ def main():
             S_set = [num_capsule, dim_capsule, routings, num_primcaps, m_dim]
             str_S_set = ''.join('_'+str(x) for x in S_set)
 
-            model = FSA_net_Capsule(image_size, num_classes, stage_num, lambda_d, S_set)()
+            model = FSA_net_Capsule(_IMAGE_SIZE, num_classes, stage_num, lambda_d, S_set)()
             save_name = 'fsanet_capsule_fine'+str_S_set
             
         elif model_type == 9:
@@ -205,7 +207,7 @@ def main():
             S_set = [num_capsule, dim_capsule, routings, num_primcaps, m_dim]
             str_S_set = ''.join('_'+str(x) for x in S_set)
 
-            model = FSA_net_Capsule_FC(image_size, num_classes, stage_num, lambda_d, S_set)()
+            model = FSA_net_Capsule_FC(_IMAGE_SIZE, num_classes, stage_num, lambda_d, S_set)()
             save_name = 'fsanet_capsule_fc'+str_S_set
         elif model_type == 10:
             num_capsule = 3
@@ -217,7 +219,7 @@ def main():
             S_set = [num_capsule, dim_capsule, routings, num_primcaps, m_dim]
             str_S_set = ''.join('_'+str(x) for x in S_set)
 
-            model = FSA_net_Var_Capsule_FC(image_size, num_classes, stage_num, lambda_d, S_set)()
+            model = FSA_net_Var_Capsule_FC(_IMAGE_SIZE, num_classes, stage_num, lambda_d, S_set)()
             save_name = 'fsanet_var_capsule_fc'+str_S_set
         elif model_type == 11:
             num_capsule = 3
@@ -229,7 +231,7 @@ def main():
             S_set = [num_capsule, dim_capsule, routings, num_primcaps, m_dim]
             str_S_set = ''.join('_'+str(x) for x in S_set)
 
-            model = FSA_net_noS_Capsule_FC(image_size, num_classes, stage_num, lambda_d, S_set)()
+            model = FSA_net_noS_Capsule_FC(_IMAGE_SIZE, num_classes, stage_num, lambda_d, S_set)()
             save_name = 'fsanet_noS_capsule_fc'+str_S_set
         elif model_type == 12:
             num_capsule = 3
@@ -241,7 +243,7 @@ def main():
             S_set = [num_capsule, dim_capsule, routings, num_primcaps, m_dim]
             str_S_set = ''.join('_'+str(x) for x in S_set)
 
-            model = FSA_net_NetVLAD_FC(image_size, num_classes, stage_num, lambda_d, S_set)()
+            model = FSA_net_NetVLAD_FC(_IMAGE_SIZE, num_classes, stage_num, lambda_d, S_set)()
             save_name = 'fsanet_netvlad_fc'+str_S_set
         elif model_type == 13:
             num_capsule = 3
@@ -253,7 +255,7 @@ def main():
             S_set = [num_capsule, dim_capsule, routings, num_primcaps, m_dim]
             str_S_set = ''.join('_'+str(x) for x in S_set)
 
-            model = FSA_net_Var_NetVLAD_FC(image_size, num_classes, stage_num, lambda_d, S_set)()
+            model = FSA_net_Var_NetVLAD_FC(_IMAGE_SIZE, num_classes, stage_num, lambda_d, S_set)()
             save_name = 'fsanet_var_netvlad_fc'+str_S_set
         elif model_type == 14:
             num_capsule = 3
@@ -265,7 +267,7 @@ def main():
             S_set = [num_capsule, dim_capsule, routings, num_primcaps, m_dim]
             str_S_set = ''.join('_'+str(x) for x in S_set)
 
-            model = FSA_net_noS_NetVLAD_FC(image_size, num_classes, stage_num, lambda_d, S_set)()
+            model = FSA_net_noS_NetVLAD_FC(_IMAGE_SIZE, num_classes, stage_num, lambda_d, S_set)()
             save_name = 'fsanet_noS_netvlad_fc'+str_S_set
 
         elif model_type == 15:
@@ -278,7 +280,7 @@ def main():
             S_set = [num_capsule, dim_capsule, routings, num_primcaps, m_dim]
             str_S_set = ''.join('_'+str(x) for x in S_set)
 
-            model1 = FSA_net_Capsule(image_size, num_classes, stage_num, lambda_d, S_set)()
+            model1 = FSA_net_Capsule(_IMAGE_SIZE, num_classes, stage_num, lambda_d, S_set)()
             save_name1 = 'fsanet_capsule'+str_S_set
 
             num_capsule = 3
@@ -290,7 +292,7 @@ def main():
             S_set = [num_capsule, dim_capsule, routings, num_primcaps, m_dim]
             str_S_set = ''.join('_'+str(x) for x in S_set)
 
-            model2 = FSA_net_Var_Capsule(image_size, num_classes, stage_num, lambda_d, S_set)()
+            model2 = FSA_net_Var_Capsule(_IMAGE_SIZE, num_classes, stage_num, lambda_d, S_set)()
             save_name2 = 'fsanet_var_capsule'+str_S_set
 
             num_capsule = 3
@@ -302,7 +304,7 @@ def main():
             S_set = [num_capsule, dim_capsule, routings, num_primcaps, m_dim]
             str_S_set = ''.join('_'+str(x) for x in S_set)
 
-            model3 = FSA_net_noS_Capsule(image_size, num_classes, stage_num, lambda_d, S_set)()
+            model3 = FSA_net_noS_Capsule(_IMAGE_SIZE, num_classes, stage_num, lambda_d, S_set)()
             save_name3 = 'fsanet_noS_capsule'+str_S_set
             save_name = 'fusion_dim_split_capsule'
         elif model_type == 16:
@@ -315,7 +317,7 @@ def main():
             S_set = [num_capsule, dim_capsule, routings, num_primcaps, m_dim]
             str_S_set = ''.join('_'+str(x) for x in S_set)
 
-            model1 = FSA_net_Capsule_FC(image_size, num_classes, stage_num, lambda_d, S_set)()
+            model1 = FSA_net_Capsule_FC(_IMAGE_SIZE, num_classes, stage_num, lambda_d, S_set)()
             save_name1 = 'fsanet_capsule_fc'+str_S_set
 
             num_capsule = 3
@@ -327,7 +329,7 @@ def main():
             S_set = [num_capsule, dim_capsule, routings, num_primcaps, m_dim]
             str_S_set = ''.join('_'+str(x) for x in S_set)
 
-            model2 = FSA_net_Var_Capsule_FC(image_size, num_classes, stage_num, lambda_d, S_set)()
+            model2 = FSA_net_Var_Capsule_FC(_IMAGE_SIZE, num_classes, stage_num, lambda_d, S_set)()
             save_name2 = 'fsanet_var_capsule_fc'+str_S_set
 
             num_capsule = 3
@@ -339,7 +341,7 @@ def main():
             S_set = [num_capsule, dim_capsule, routings, num_primcaps, m_dim]
             str_S_set = ''.join('_'+str(x) for x in S_set)
 
-            model3 = FSA_net_noS_Capsule_FC(image_size, num_classes, stage_num, lambda_d, S_set)()
+            model3 = FSA_net_noS_Capsule_FC(_IMAGE_SIZE, num_classes, stage_num, lambda_d, S_set)()
             save_name3 = 'fsanet_noS_capsule_fc'+str_S_set
 
             save_name = 'fusion_fc_capsule'
@@ -353,7 +355,7 @@ def main():
             S_set = [num_capsule, dim_capsule, routings, num_primcaps, m_dim]
             str_S_set = ''.join('_'+str(x) for x in S_set)
 
-            model1 = FSA_net_NetVLAD(image_size, num_classes, stage_num, lambda_d, S_set)()
+            model1 = FSA_net_NetVLAD(_IMAGE_SIZE, num_classes, stage_num, lambda_d, S_set)()
             save_name1 = 'fsanet_netvlad'+str_S_set
 
             num_capsule = 3
@@ -365,7 +367,7 @@ def main():
             S_set = [num_capsule, dim_capsule, routings, num_primcaps, m_dim]
             str_S_set = ''.join('_'+str(x) for x in S_set)
 
-            model2 = FSA_net_Var_NetVLAD(image_size, num_classes, stage_num, lambda_d, S_set)()
+            model2 = FSA_net_Var_NetVLAD(_IMAGE_SIZE, num_classes, stage_num, lambda_d, S_set)()
             save_name2 = 'fsanet_var_netvlad'+str_S_set
 
             num_capsule = 3
@@ -377,7 +379,7 @@ def main():
             S_set = [num_capsule, dim_capsule, routings, num_primcaps, m_dim]
             str_S_set = ''.join('_'+str(x) for x in S_set)
 
-            model3 = FSA_net_noS_NetVLAD(image_size, num_classes, stage_num, lambda_d, S_set)()
+            model3 = FSA_net_noS_NetVLAD(_IMAGE_SIZE, num_classes, stage_num, lambda_d, S_set)()
             save_name3 = 'fsanet_noS_netvlad'+str_S_set
 
             save_name = 'fusion_dim_split_netvlad'
@@ -391,7 +393,7 @@ def main():
             S_set = [num_capsule, dim_capsule, routings, num_primcaps, m_dim]
             str_S_set = ''.join('_'+str(x) for x in S_set)
 
-            model1 = FSA_net_NetVLAD_FC(image_size, num_classes, stage_num, lambda_d, S_set)()
+            model1 = FSA_net_NetVLAD_FC(_IMAGE_SIZE, num_classes, stage_num, lambda_d, S_set)()
             save_name1 = 'fsanet_netvlad_fc'+str_S_set
 
             num_capsule = 3
@@ -403,7 +405,7 @@ def main():
             S_set = [num_capsule, dim_capsule, routings, num_primcaps, m_dim]
             str_S_set = ''.join('_'+str(x) for x in S_set)
 
-            model2 = FSA_net_Var_NetVLAD_FC(image_size, num_classes, stage_num, lambda_d, S_set)()
+            model2 = FSA_net_Var_NetVLAD_FC(_IMAGE_SIZE, num_classes, stage_num, lambda_d, S_set)()
             save_name2 = 'fsanet_var_netvlad_fc'+str_S_set
 
             num_capsule = 3
@@ -415,7 +417,7 @@ def main():
             S_set = [num_capsule, dim_capsule, routings, num_primcaps, m_dim]
             str_S_set = ''.join('_'+str(x) for x in S_set)
 
-            model3 = FSA_net_noS_NetVLAD_FC(image_size, num_classes, stage_num, lambda_d, S_set)()
+            model3 = FSA_net_noS_NetVLAD_FC(_IMAGE_SIZE, num_classes, stage_num, lambda_d, S_set)()
             save_name3 = 'fsanet_noS_netvlad_fc'+str_S_set
             save_name = 'fusion_fc_netvlad'
 
