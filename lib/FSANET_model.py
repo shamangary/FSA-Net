@@ -22,6 +22,8 @@ from keras.layers import BatchNormalization
 from keras import backend as K
 
 from .capsulelayers import CapsuleLayer
+from .capsulelayers import MatMulLayer
+
 from .loupe_keras import NetVLAD
 
 sys.setrecursionlimit(2 ** 20)
@@ -208,8 +210,7 @@ class BaseFSANet(object):
         feat_pred_s3 = Dense(self.stage_num[2]*self.num_classes,activation='relu')(feat_pred_s3) 
         pred_s3 = Reshape((self.num_classes,self.stage_num[2]))(feat_pred_s3)
     
-        ssr_F_model = Model(inputs=[input_s1_pre,input_s2_pre,input_s3_pre],outputs=[pred_s1,pred_s2,pred_s3,delta_s1,delta_s2,delta_s3,local_s1,local_s2,local_s3], name=name_F)
-        return ssr_F_model
+        return Model(inputs=[input_s1_pre,input_s2_pre,input_s3_pre],outputs=[pred_s1,pred_s2,pred_s3,delta_s1,delta_s2,delta_s3,local_s1,local_s2,local_s3], name=name_F)
 
     def ssr_FC_model_build(self, feat_dim, name_F):
         input_s1_pre = Input((feat_dim,))
@@ -244,12 +245,14 @@ class BaseFSANet(object):
         feat_pred_s3 = Dense(self.stage_num[2]*self.num_classes,activation='relu')(input_s3_pre) 
         pred_s3 = Reshape((self.num_classes,self.stage_num[2]))(feat_pred_s3)
     
-        ssr_F_model = Model(inputs=[input_s1_pre,input_s2_pre,input_s3_pre],outputs=[pred_s1,pred_s2,pred_s3,delta_s1,delta_s2,delta_s3,local_s1,local_s2,local_s3], name=name_F)
-        return ssr_F_model
+        return Model(inputs=[input_s1_pre,input_s2_pre,input_s3_pre],outputs=[pred_s1,pred_s2,pred_s3,delta_s1,delta_s2,delta_s3,local_s1,local_s2,local_s3], name=name_F)
+
+# Capsule FSANetworks
 
 class BaseCapsuleFSANet(BaseFSANet):
     def __init__(self, image_size,num_classes,stage_num,lambda_d, S_set):
         super(BaseCapsuleFSANet, self).__init__(image_size,num_classes,stage_num,lambda_d, S_set) 
+        self.is_fc_model = False
 
     def ssr_Cap_model_build(self, shape_primcaps):
         input_primcaps = Input(shape_primcaps)
@@ -269,12 +272,179 @@ class BaseCapsuleFSANet(BaseFSANet):
         feat_s2_div = Reshape((-1,))(feat_s2_div)
         feat_s3_div = Reshape((-1,))(feat_s3_div)
         
-        ssr_Cap_model = Model(inputs=input_primcaps,outputs=[feat_s1_div,feat_s2_div,feat_s3_div], name='ssr_Cap_model')            
-        return ssr_Cap_model   
+        return Model(inputs=input_primcaps,outputs=[feat_s1_div,feat_s2_div,feat_s3_div], name='ssr_Cap_model')            
+
+    def __call__(self):
+        logging.debug("Creating model...")
+        img_inputs = Input(self._input_shape)        
+
+        # Build various models
+        ssr_G_model = self.ssr_G_model_build(img_inputs)        
+        ssr_S_model = self.ssr_S_model_build(num_primcaps=self.num_primcaps,m_dim=self.m_dim)           
+        ssr_Cap_model = self.ssr_Cap_model_build((self.num_primcaps,64))
+
+        if self.is_fc_model:
+            ssr_F_Cap_model = self.ssr_FC_model_build(self.F_shape,'ssr_F_Cap_model')
+        else:    
+            ssr_F_Cap_model = self.ssr_F_model_build(self.F_shape,'ssr_F_Cap_model')
+
+        # Wire them up
+        ssr_G_list = ssr_G_model(img_inputs)
+        ssr_primcaps = ssr_S_model(ssr_G_list)
+        ssr_Cap_list = ssr_Cap_model(ssr_primcaps)
+        ssr_F_Cap_list = ssr_F_Cap_model(ssr_Cap_list)
+        pred_pose = Lambda(self.SSR_module,arguments={'s1':self.stage_num[0],'s2':self.stage_num[1],'s3':self.stage_num[2],'lambda_d':self.lambda_d},name='pred_pose')(ssr_F_Cap_list)
+        
+        return Model(inputs=img_inputs, outputs=pred_pose)
+
+class FSA_net_Capsule(BaseCapsuleFSANet):
+    def __init__(self, image_size,num_classes,stage_num,lambda_d, S_set):
+        super(FSA_net_Capsule, self).__init__(image_size,num_classes,stage_num,lambda_d, S_set)       
+
+    def ssr_feat_S_model_build(self, num_primcaps, m_dim):
+        input_preS = Input((8,8,64))
+        feat_preS = Conv2D(1,(1,1),padding='same',activation='sigmoid')(input_preS)
+        feat_preS = Reshape((-1,))(feat_preS)
+        SR_matrix = Dense(m_dim*(8*8+8*8+8*8),activation='sigmoid')(feat_preS)
+        SR_matrix = Reshape((m_dim,(8*8+8*8+8*8)))(SR_matrix)
+        
+        return Model(inputs=input_preS,outputs=[SR_matrix,feat_preS],name='feat_S_model')
+
+    def ssr_S_model_build(self, num_primcaps, m_dim):
+        input_s1_preS = Input((8,8,64))
+        input_s2_preS = Input((8,8,64))
+        input_s3_preS = Input((8,8,64))
+
+        feat_S_model = self.ssr_feat_S_model_build(num_primcaps, m_dim)
+
+        SR_matrix_s1,feat_s1_preS = feat_S_model(input_s1_preS)
+        SR_matrix_s2,feat_s2_preS = feat_S_model(input_s2_preS)
+        SR_matrix_s3,feat_s3_preS = feat_S_model(input_s3_preS)
+        
+        feat_pre_concat = Concatenate()([feat_s1_preS,feat_s2_preS,feat_s3_preS])
+        SL_matrix = Dense(int(num_primcaps/3)*m_dim,activation='sigmoid')(feat_pre_concat)
+        SL_matrix = Reshape((int(num_primcaps/3),m_dim))(SL_matrix)
+        
+        S_matrix_s1 = Lambda(lambda x: tf.matmul(x[0],x[1]),name='S_matrix_s1')([SL_matrix,SR_matrix_s1])
+        S_matrix_s2 = Lambda(lambda x: tf.matmul(x[0],x[1]),name='S_matrix_s2')([SL_matrix,SR_matrix_s2])
+        S_matrix_s3 = Lambda(lambda x: tf.matmul(x[0],x[1]),name='S_matrix_s3')([SL_matrix,SR_matrix_s3])
+
+        # Very important!!! Without this training won't converge.
+        # norm_S = Lambda(lambda x: K.tile(K.sum(x,axis=-1,keepdims=True),(1,1,64)))(S_matrix)
+        norm_S_s1 = Lambda(lambda x: K.tile(K.sum(x,axis=-1,keepdims=True),(1,1,64)))(S_matrix_s1)
+        norm_S_s2 = Lambda(lambda x: K.tile(K.sum(x,axis=-1,keepdims=True),(1,1,64)))(S_matrix_s2)
+        norm_S_s3 = Lambda(lambda x: K.tile(K.sum(x,axis=-1,keepdims=True),(1,1,64)))(S_matrix_s3)
+
+        feat_s1_pre = Reshape((-1,64))(input_s1_preS)
+        feat_s2_pre = Reshape((-1,64))(input_s2_preS)
+        feat_s3_pre = Reshape((-1,64))(input_s3_preS)
+        feat_pre_concat = Concatenate(axis=1)([feat_s1_pre, feat_s2_pre, feat_s3_pre])
+        
+        # Warining: don't use keras's 'K.dot'. It is very weird when high dimension is used.
+        # https://github.com/keras-team/keras/issues/9779
+        # Make sure 'tf.matmul' is used
+        # primcaps = Lambda(lambda x: tf.matmul(x[0],x[1])/x[2])([S_matrix,feat_pre_concat, norm_S])
+        primcaps_s1 = Lambda(lambda x: tf.matmul(x[0],x[1])/x[2])([S_matrix_s1,feat_pre_concat, norm_S_s1])
+        primcaps_s2 = Lambda(lambda x: tf.matmul(x[0],x[1])/x[2])([S_matrix_s2,feat_pre_concat, norm_S_s2])
+        primcaps_s3 = Lambda(lambda x: tf.matmul(x[0],x[1])/x[2])([S_matrix_s3,feat_pre_concat, norm_S_s3])
+        primcaps = Concatenate(axis=1)([primcaps_s1,primcaps_s2,primcaps_s3])
+
+        return Model(inputs=[input_s1_preS, input_s2_preS, input_s3_preS],outputs=primcaps, name='ssr_S_model')
+ 
+class FSA_net_Var_Capsule(BaseCapsuleFSANet):
+    def __init__(self, image_size,num_classes,stage_num,lambda_d, S_set):
+        super(FSA_net_Var_Capsule, self).__init__(image_size,num_classes,stage_num,lambda_d, S_set)   
+
+    def ssr_feat_S_model_build(self, num_primcaps, m_dim):
+        input_preS = Input((8,8,64))
+        def var(x):
+            mean, var = tf.nn.moments(x,axes=-1)
+            return var
+        feat_preS = Lambda(var)(input_preS)
+        feat_preS = Reshape((-1,))(feat_preS)
+        SR_matrix = Dense(m_dim*(8*8+8*8+8*8),activation='sigmoid')(feat_preS)
+        SR_matrix = Reshape((m_dim,(8*8+8*8+8*8)))(SR_matrix)
+        
+        return Model(inputs=input_preS,outputs=[SR_matrix,feat_preS],name='feat_S_model')
+
+    def ssr_S_model_build(self, num_primcaps, m_dim):
+        input_s1_preS = Input((8,8,64))
+        input_s2_preS = Input((8,8,64))
+        input_s3_preS = Input((8,8,64))
+
+        feat_S_model = self.ssr_feat_S_model_build(num_primcaps, m_dim)
+
+        SR_matrix_s1,feat_s1_preS = feat_S_model(input_s1_preS)
+        SR_matrix_s2,feat_s2_preS = feat_S_model(input_s2_preS)
+        SR_matrix_s3,feat_s3_preS = feat_S_model(input_s3_preS)
+        
+        feat_pre_concat = Concatenate()([feat_s1_preS,feat_s2_preS,feat_s3_preS])
+        SL_matrix = Dense(int(num_primcaps/3)*m_dim,activation='sigmoid')(feat_pre_concat)
+        SL_matrix = Reshape((int(num_primcaps/3),m_dim))(SL_matrix)
+        
+        S_matrix_s1 = Lambda(lambda x: tf.matmul(x[0],x[1]),name='S_matrix_s1')([SL_matrix,SR_matrix_s1])
+        S_matrix_s2 = Lambda(lambda x: tf.matmul(x[0],x[1]),name='S_matrix_s2')([SL_matrix,SR_matrix_s2])
+        S_matrix_s3 = Lambda(lambda x: tf.matmul(x[0],x[1]),name='S_matrix_s3')([SL_matrix,SR_matrix_s3])
+
+        # Very important!!! Without this training won't converge.
+        # norm_S = Lambda(lambda x: K.tile(K.sum(x,axis=-1,keepdims=True),(1,1,64)))(S_matrix)
+        norm_S_s1 = Lambda(lambda x: K.tile(K.sum(x,axis=-1,keepdims=True),(1,1,64)))(S_matrix_s1)
+        norm_S_s2 = Lambda(lambda x: K.tile(K.sum(x,axis=-1,keepdims=True),(1,1,64)))(S_matrix_s2)
+        norm_S_s3 = Lambda(lambda x: K.tile(K.sum(x,axis=-1,keepdims=True),(1,1,64)))(S_matrix_s3)
+
+        feat_s1_pre = Reshape((-1,64))(input_s1_preS)
+        feat_s2_pre = Reshape((-1,64))(input_s2_preS)
+        feat_s3_pre = Reshape((-1,64))(input_s3_preS)
+        feat_pre_concat = Concatenate(axis=1)([feat_s1_pre, feat_s2_pre, feat_s3_pre])
+        
+        # Warining: don't use keras's 'K.dot'. It is very weird when high dimension is used.
+        # https://github.com/keras-team/keras/issues/9779
+        # Make sure 'tf.matmul' is used
+        # primcaps = Lambda(lambda x: tf.matmul(x[0],x[1])/x[2])([S_matrix,feat_pre_concat, norm_S])
+        primcaps_s1 = Lambda(lambda x: tf.matmul(x[0],x[1])/x[2])([S_matrix_s1,feat_pre_concat, norm_S_s1])
+        primcaps_s2 = Lambda(lambda x: tf.matmul(x[0],x[1])/x[2])([S_matrix_s2,feat_pre_concat, norm_S_s2])
+        primcaps_s3 = Lambda(lambda x: tf.matmul(x[0],x[1])/x[2])([S_matrix_s3,feat_pre_concat, norm_S_s3])
+        primcaps = Concatenate(axis=1)([primcaps_s1,primcaps_s2,primcaps_s3])
+
+        return Model(inputs=[input_s1_preS, input_s2_preS, input_s3_preS],outputs=primcaps, name='ssr_S_model')
+    
+class FSA_net_noS_Capsule(BaseCapsuleFSANet):
+    def __init__(self, image_size,num_classes,stage_num,lambda_d, S_set):
+        super(FSA_net_noS_Capsule, self).__init__(image_size,num_classes,stage_num,lambda_d, S_set)   
+    
+    def ssr_S_model_build(self, **kwargs):
+        input_s1_preS = Input((8,8,64))
+        input_s2_preS = Input((8,8,64))
+        input_s3_preS = Input((8,8,64))
+
+        primcaps_s1 = Reshape((8*8,64))(input_s1_preS)
+        primcaps_s2 = Reshape((8*8,64))(input_s2_preS)
+        primcaps_s3 = Reshape((8*8,64))(input_s3_preS)
+
+        primcaps = Concatenate(axis=1)([primcaps_s1,primcaps_s2,primcaps_s3])
+        return Model(inputs=[input_s1_preS, input_s2_preS, input_s3_preS],outputs=primcaps, name='ssr_S_model')
+
+class FSA_net_Capsule_FC(FSA_net_Capsule):
+    def __init__(self, image_size,num_classes,stage_num,lambda_d, S_set):
+        super(FSA_net_Capsule_FC, self).__init__(image_size,num_classes,stage_num,lambda_d, S_set)  
+        self.is_fc_model = True
+
+class FSA_net_Var_Capsule_FC(FSA_net_Var_Capsule):
+    def __init__(self, image_size,num_classes,stage_num,lambda_d, S_set):
+        super(FSA_net_Var_Capsule_FC, self).__init__(image_size,num_classes,stage_num,lambda_d, S_set)
+        self.is_fc_model = True
+        
+class FSA_net_noS_Capsule_FC(BaseCapsuleFSANet):
+    def __init__(self, image_size,num_classes,stage_num,lambda_d, S_set):
+        super(FSA_net_noS_Capsule_FC, self).__init__(image_size,num_classes,stage_num,lambda_d, S_set)
+        self.is_fc_model = True
+   
+# NetVLAD models
 
 class BaseNetVLADFSANet(BaseFSANet):
     def __init__(self, image_size,num_classes,stage_num,lambda_d, S_set):
         super(BaseNetVLADFSANet, self).__init__(image_size,num_classes,stage_num,lambda_d, S_set) 
+        self.is_fc_model = False
 
     def ssr_Agg_model_build(self, shape_primcaps):
         input_primcaps = Input(shape_primcaps)
@@ -297,8 +467,177 @@ class BaseNetVLADFSANet(BaseFSANet):
         feat_s2_div = Reshape((-1,))(feat_s2_div)
         feat_s3_div = Reshape((-1,))(feat_s3_div)
         
-        ssr_Agg_model = Model(inputs=input_primcaps,outputs=[feat_s1_div,feat_s2_div,feat_s3_div], name='ssr_Agg_model')            
-        return ssr_Agg_model 
+        return Model(inputs=input_primcaps,outputs=[feat_s1_div,feat_s2_div,feat_s3_div], name='ssr_Agg_model')  
+
+    def __call__(self):
+        logging.debug("Creating model...")
+
+        img_inputs = Input(self._input_shape)
+        ssr_G_model = self.ssr_G_model_build(img_inputs)
+        ssr_S_model = self.ssr_S_model_build(num_primcaps=self.num_primcaps,m_dim=self.m_dim)        
+        ssr_Agg_model = self.ssr_Agg_model_build((self.num_primcaps,64))
+
+        if self.is_fc_model:
+            ssr_F_model  =self.ssr_FC_model_build(self.F_shape,'ssr_F_model')
+        else:
+            ssr_F_model = self.ssr_F_model_build(self.F_shape,'ssr_F_model')
+        
+        ssr_G_list = ssr_G_model(img_inputs)
+        ssr_primcaps = ssr_S_model(ssr_G_list)
+        ssr_Agg_list = ssr_Agg_model(ssr_primcaps)
+        ssr_F_list = ssr_F_model(ssr_Agg_list)
+        pred_pose = Lambda(self.SSR_module,arguments={'s1':self.stage_num[0],'s2':self.stage_num[1],'s3':self.stage_num[2],'lambda_d':self.lambda_d},name='pred_pose')(ssr_F_list)
+
+        return Model(inputs=img_inputs, outputs=pred_pose)          
+
+class FSA_net_NetVLAD(BaseNetVLADFSANet):
+    def __init__(self, image_size,num_classes,stage_num,lambda_d, S_set):
+        super(FSA_net_NetVLAD, self).__init__(image_size,num_classes,stage_num,lambda_d, S_set)
+
+    def ssr_feat_S_model_build(self, m_dim):
+        input_preS = Input((8,8,64))
+
+        feat_preS = Conv2D(1,(1,1),padding='same',activation='sigmoid')(input_preS)
+        feat_preS = Reshape((-1,))(feat_preS)
+        SR_matrix = Dense(m_dim*(8*8+8*8+8*8),activation='sigmoid')(feat_preS)
+        SR_matrix = Reshape((m_dim,(8*8+8*8+8*8)))(SR_matrix)
+        
+        return Model(inputs=input_preS,outputs=[SR_matrix,feat_preS],name='feat_S_model')
+
+    def ssr_S_model_build(self, num_primcaps, m_dim):
+        input_s1_preS = Input((8,8,64))
+        input_s2_preS = Input((8,8,64))
+        input_s3_preS = Input((8,8,64))
+
+        ssr_feat_S_model = self.ssr_feat_S_model_build(m_dim)
+
+        SR_matrix_s1,feat_s1_preS = ssr_feat_S_model(input_s1_preS)
+        SR_matrix_s2,feat_s2_preS = ssr_feat_S_model(input_s2_preS)
+        SR_matrix_s3,feat_s3_preS = ssr_feat_S_model(input_s3_preS)
+        
+        feat_pre_concat = Concatenate()([feat_s1_preS,feat_s2_preS,feat_s3_preS])
+        SL_matrix = Dense(int(num_primcaps/3)*m_dim,activation='sigmoid')(feat_pre_concat)
+        SL_matrix = Reshape((int(num_primcaps/3),m_dim))(SL_matrix)
+        
+        S_matrix_s1 = Lambda(lambda x: tf.matmul(x[0],x[1]),name='S_matrix_s1')([SL_matrix,SR_matrix_s1])
+        S_matrix_s2 = Lambda(lambda x: tf.matmul(x[0],x[1]),name='S_matrix_s2')([SL_matrix,SR_matrix_s2])
+        S_matrix_s3 = Lambda(lambda x: tf.matmul(x[0],x[1]),name='S_matrix_s3')([SL_matrix,SR_matrix_s3])
+
+        # Very important!!! Without this training won't converge.
+        # norm_S = Lambda(lambda x: K.tile(K.sum(x,axis=-1,keepdims=True),(1,1,64)))(S_matrix)
+        norm_S_s1 = Lambda(lambda x: K.tile(K.sum(x,axis=-1,keepdims=True),(1,1,64)))(S_matrix_s1)
+        norm_S_s2 = Lambda(lambda x: K.tile(K.sum(x,axis=-1,keepdims=True),(1,1,64)))(S_matrix_s2)
+        norm_S_s3 = Lambda(lambda x: K.tile(K.sum(x,axis=-1,keepdims=True),(1,1,64)))(S_matrix_s3)
+
+        feat_s1_pre = Reshape((-1,64))(input_s1_preS)
+        feat_s2_pre = Reshape((-1,64))(input_s2_preS)
+        feat_s3_pre = Reshape((-1,64))(input_s3_preS)
+        feat_pre_concat = Concatenate(axis=1)([feat_s1_pre, feat_s2_pre, feat_s3_pre])
+        
+        # Warining: don't use keras's 'K.dot'. It is very weird when high dimension is used.
+        # https://github.com/keras-team/keras/issues/9779
+        # Make sure 'tf.matmul' is used
+        # primcaps = Lambda(lambda x: tf.matmul(x[0],x[1])/x[2])([S_matrix,feat_pre_concat, norm_S])
+        primcaps_s1 = Lambda(lambda x: tf.matmul(x[0],x[1])/x[2])([S_matrix_s1,feat_pre_concat, norm_S_s1])
+        primcaps_s2 = Lambda(lambda x: tf.matmul(x[0],x[1])/x[2])([S_matrix_s2,feat_pre_concat, norm_S_s2])
+        primcaps_s3 = Lambda(lambda x: tf.matmul(x[0],x[1])/x[2])([S_matrix_s3,feat_pre_concat, norm_S_s3])
+        primcaps = Concatenate(axis=1)([primcaps_s1,primcaps_s2,primcaps_s3])
+
+        ssr_S_model = Model(inputs=[input_s1_preS, input_s2_preS, input_s3_preS],outputs=primcaps, name='ssr_S_model')
+        return ssr_S_model
+    
+class FSA_net_Var_NetVLAD(BaseNetVLADFSANet):
+    def __init__(self, image_size,num_classes,stage_num,lambda_d, S_set):
+        super(FSA_net_Var_NetVLAD, self).__init__(image_size,num_classes,stage_num,lambda_d, S_set)
+
+    def ssr_feat_S_model_build(self, m_dim):
+        input_preS = Input((8,8,64))
+
+        #feat_preS = Conv2D(1,(1,1),padding='same',activation='sigmoid')(input_preS)
+        def var(x):
+            mean, var = tf.nn.moments(x,axes=-1)
+            return var
+        feat_preS = Lambda(var)(input_preS)
+        feat_preS = Reshape((-1,))(feat_preS)
+        SR_matrix = Dense(m_dim*(8*8+8*8+8*8),activation='sigmoid')(feat_preS)
+        SR_matrix = Reshape((m_dim,(8*8+8*8+8*8)))(SR_matrix)
+        
+        return Model(inputs=input_preS,outputs=[SR_matrix,feat_preS],name='feat_S_model')
+
+    def ssr_S_model_build(self, num_primcaps, m_dim):
+        input_s1_preS = Input((8,8,64))
+        input_s2_preS = Input((8,8,64))
+        input_s3_preS = Input((8,8,64))
+
+        ssr_feat_S_model = self.ssr_feat_S_model_build(m_dim)
+
+        SR_matrix_s1,feat_s1_preS = ssr_feat_S_model(input_s1_preS)
+        SR_matrix_s2,feat_s2_preS = ssr_feat_S_model(input_s2_preS)
+        SR_matrix_s3,feat_s3_preS = ssr_feat_S_model(input_s3_preS)
+        
+        feat_pre_concat = Concatenate()([feat_s1_preS,feat_s2_preS,feat_s3_preS])
+        SL_matrix = Dense(int(num_primcaps/3)*m_dim,activation='sigmoid')(feat_pre_concat)
+        SL_matrix = Reshape((int(num_primcaps/3),m_dim))(SL_matrix)
+        
+        S_matrix_s1 = Lambda(lambda x: tf.matmul(x[0],x[1]),name='S_matrix_s1')([SL_matrix,SR_matrix_s1])
+        S_matrix_s2 = Lambda(lambda x: tf.matmul(x[0],x[1]),name='S_matrix_s2')([SL_matrix,SR_matrix_s2])
+        S_matrix_s3 = Lambda(lambda x: tf.matmul(x[0],x[1]),name='S_matrix_s3')([SL_matrix,SR_matrix_s3])
+
+        # Very important!!! Without this training won't converge.
+        # norm_S = Lambda(lambda x: K.tile(K.sum(x,axis=-1,keepdims=True),(1,1,64)))(S_matrix)
+        norm_S_s1 = Lambda(lambda x: K.tile(K.sum(x,axis=-1,keepdims=True),(1,1,64)))(S_matrix_s1)
+        norm_S_s2 = Lambda(lambda x: K.tile(K.sum(x,axis=-1,keepdims=True),(1,1,64)))(S_matrix_s2)
+        norm_S_s3 = Lambda(lambda x: K.tile(K.sum(x,axis=-1,keepdims=True),(1,1,64)))(S_matrix_s3)
+
+        feat_s1_pre = Reshape((-1,64))(input_s1_preS)
+        feat_s2_pre = Reshape((-1,64))(input_s2_preS)
+        feat_s3_pre = Reshape((-1,64))(input_s3_preS)
+        feat_pre_concat = Concatenate(axis=1)([feat_s1_pre, feat_s2_pre, feat_s3_pre])
+        
+        # Warining: don't use keras's 'K.dot'. It is very weird when high dimension is used.
+        # https://github.com/keras-team/keras/issues/9779
+        # Make sure 'tf.matmul' is used
+        # primcaps = Lambda(lambda x: tf.matmul(x[0],x[1])/x[2])([S_matrix,feat_pre_concat, norm_S])
+        primcaps_s1 = Lambda(lambda x: tf.matmul(x[0],x[1])/x[2])([S_matrix_s1,feat_pre_concat, norm_S_s1])
+        primcaps_s2 = Lambda(lambda x: tf.matmul(x[0],x[1])/x[2])([S_matrix_s2,feat_pre_concat, norm_S_s2])
+        primcaps_s3 = Lambda(lambda x: tf.matmul(x[0],x[1])/x[2])([S_matrix_s3,feat_pre_concat, norm_S_s3])
+        primcaps = Concatenate(axis=1)([primcaps_s1,primcaps_s2,primcaps_s3])
+
+        ssr_S_model = Model(inputs=[input_s1_preS, input_s2_preS, input_s3_preS],outputs=primcaps, name='ssr_S_model')
+        return ssr_S_model
+
+class FSA_net_noS_NetVLAD(BaseNetVLADFSANet):
+    def __init__(self, image_size,num_classes,stage_num,lambda_d, S_set):
+        super(FSA_net_noS_NetVLAD, self).__init__(image_size,num_classes,stage_num,lambda_d, S_set)
+
+    def ssr_S_model_build(self, **kwargs):
+        input_s1_preS = Input((8,8,64))
+        input_s2_preS = Input((8,8,64))
+        input_s3_preS = Input((8,8,64))
+
+        primcaps_s1 = Reshape((8*8,64))(input_s1_preS)
+        primcaps_s2 = Reshape((8*8,64))(input_s2_preS)
+        primcaps_s3 = Reshape((8*8,64))(input_s3_preS)
+        primcaps = Concatenate(axis=1)([primcaps_s1,primcaps_s2,primcaps_s3])
+
+        return Model(inputs=[input_s1_preS, input_s2_preS, input_s3_preS],outputs=primcaps, name='ssr_S_model')
+
+class FSA_net_NetVLAD_FC(FSA_net_NetVLAD):
+    def __init__(self, image_size,num_classes,stage_num,lambda_d, S_set):
+        super(FSA_net_NetVLAD_FC, self).__init__(image_size,num_classes,stage_num,lambda_d, S_set)
+        self.is_fc_model = True
+
+class FSA_net_Var_NetVLAD_FC(FSA_net_Var_NetVLAD):
+    def __init__(self, image_size,num_classes,stage_num,lambda_d, S_set):
+        super(FSA_net_Var_NetVLAD_FC, self).__init__(image_size,num_classes,stage_num,lambda_d, S_set)
+        self.is_fc_model = True
+
+class FSA_net_noS_NetVLAD_FC(FSA_net_noS_NetVLAD):
+    def __init__(self, image_size,num_classes,stage_num,lambda_d, S_set):
+        super(FSA_net_noS_NetVLAD_FC, self).__init__(image_size,num_classes,stage_num,lambda_d, S_set)
+        self.is_fc_model = True
+
+# // Metric models
 
 class BaseMetricFSANet(BaseFSANet):
     def __init__(self, image_size,num_classes,stage_num,lambda_d, S_set):
@@ -324,995 +663,156 @@ class BaseMetricFSANet(BaseFSANet):
         feat_s2_div = Reshape((-1,))(feat_s2_div)
         feat_s3_div = Reshape((-1,))(feat_s3_div)
         
-        ssr_Metric_model = Model(inputs=input_primcaps,outputs=[feat_s1_div,feat_s2_div,feat_s3_div], name='ssr_Metric_model')            
-        return ssr_Metric_model
+        return Model(inputs=input_primcaps,outputs=[feat_s1_div,feat_s2_div,feat_s3_div], name='ssr_Metric_model')  
 
-class FSA_net_Capsule(BaseCapsuleFSANet):
-    def __init__(self, image_size,num_classes,stage_num,lambda_d, S_set):
-        super(FSA_net_Capsule, self).__init__(image_size,num_classes,stage_num,lambda_d, S_set)       
-        
     def __call__(self):
         logging.debug("Creating model...")
-
-        img_inputs = Input(self._input_shape)        
-
-        ssr_G_model = self.ssr_G_model_build(img_inputs)
-        def ssr_feat_S_model_build(num_primcaps, m_dim):
-            input_preS = Input((8,8,64))
-
-            feat_preS = Conv2D(1,(1,1),padding='same',activation='sigmoid')(input_preS)
-            feat_preS = Reshape((-1,))(feat_preS)
-            SR_matrix = Dense(m_dim*(8*8+8*8+8*8),activation='sigmoid')(feat_preS)
-            SR_matrix = Reshape((m_dim,(8*8+8*8+8*8)))(SR_matrix)
-            
-            ssr_feat_S_model = Model(inputs=input_preS,outputs=[SR_matrix,feat_preS],name='feat_S_model')
-            return ssr_feat_S_model
-
-        ssr_feat_S_model = ssr_feat_S_model_build(self.num_primcaps,self.m_dim)  
-        #-------------------------------------------------------------------------------------------------------------------------
-        def ssr_S_model_build(num_primcaps, m_dim):
-            input_s1_preS = Input((8,8,64))
-            input_s2_preS = Input((8,8,64))
-            input_s3_preS = Input((8,8,64))
-
-            SR_matrix_s1,feat_s1_preS = ssr_feat_S_model(input_s1_preS)
-            SR_matrix_s2,feat_s2_preS = ssr_feat_S_model(input_s2_preS)
-            SR_matrix_s3,feat_s3_preS = ssr_feat_S_model(input_s3_preS)
-            
-            feat_pre_concat = Concatenate()([feat_s1_preS,feat_s2_preS,feat_s3_preS])
-            SL_matrix = Dense(int(num_primcaps/3)*m_dim,activation='sigmoid')(feat_pre_concat)
-            SL_matrix = Reshape((int(num_primcaps/3),m_dim))(SL_matrix)
-            
-            S_matrix_s1 = Lambda(lambda x: tf.matmul(x[0],x[1]),name='S_matrix_s1')([SL_matrix,SR_matrix_s1])
-            S_matrix_s2 = Lambda(lambda x: tf.matmul(x[0],x[1]),name='S_matrix_s2')([SL_matrix,SR_matrix_s2])
-            S_matrix_s3 = Lambda(lambda x: tf.matmul(x[0],x[1]),name='S_matrix_s3')([SL_matrix,SR_matrix_s3])
-
-            # Very important!!! Without this training won't converge.
-            # norm_S = Lambda(lambda x: K.tile(K.sum(x,axis=-1,keepdims=True),(1,1,64)))(S_matrix)
-            norm_S_s1 = Lambda(lambda x: K.tile(K.sum(x,axis=-1,keepdims=True),(1,1,64)))(S_matrix_s1)
-            norm_S_s2 = Lambda(lambda x: K.tile(K.sum(x,axis=-1,keepdims=True),(1,1,64)))(S_matrix_s2)
-            norm_S_s3 = Lambda(lambda x: K.tile(K.sum(x,axis=-1,keepdims=True),(1,1,64)))(S_matrix_s3)
-
-            feat_s1_pre = Reshape((-1,64))(input_s1_preS)
-            feat_s2_pre = Reshape((-1,64))(input_s2_preS)
-            feat_s3_pre = Reshape((-1,64))(input_s3_preS)
-            feat_pre_concat = Concatenate(axis=1)([feat_s1_pre, feat_s2_pre, feat_s3_pre])
-            
-            # Warining: don't use keras's 'K.dot'. It is very weird when high dimension is used.
-            # https://github.com/keras-team/keras/issues/9779
-            # Make sure 'tf.matmul' is used
-            # primcaps = Lambda(lambda x: tf.matmul(x[0],x[1])/x[2])([S_matrix,feat_pre_concat, norm_S])
-            primcaps_s1 = Lambda(lambda x: tf.matmul(x[0],x[1])/x[2])([S_matrix_s1,feat_pre_concat, norm_S_s1])
-            primcaps_s2 = Lambda(lambda x: tf.matmul(x[0],x[1])/x[2])([S_matrix_s2,feat_pre_concat, norm_S_s2])
-            primcaps_s3 = Lambda(lambda x: tf.matmul(x[0],x[1])/x[2])([S_matrix_s3,feat_pre_concat, norm_S_s3])
-            primcaps = Concatenate(axis=1)([primcaps_s1,primcaps_s2,primcaps_s3])
-
-            ssr_S_model = Model(inputs=[input_s1_preS, input_s2_preS, input_s3_preS],outputs=primcaps, name='ssr_S_model')
-            return ssr_S_model
         
-        ssr_S_model = ssr_S_model_build(self.num_primcaps,self.m_dim)        
-        #-------------------------------------------------------------------------------------------------------------------------       
-        ssr_Cap_model = self.ssr_Cap_model_build((self.num_primcaps,64))
-        #-------------------------------------------------------------------------------------------------------------------------
-        ssr_F_Cap_model = self.ssr_F_model_build(self.F_shape,'ssr_F_Cap_model')
-        #-------------------------------------------------------------------------------------------------------------------------
-        ssr_G_list = ssr_G_model(img_inputs)
-        ssr_primcaps = ssr_S_model(ssr_G_list)
-        ssr_Cap_list = ssr_Cap_model(ssr_primcaps)
-        ssr_F_Cap_list = ssr_F_Cap_model(ssr_Cap_list)
-        pred_pose = Lambda(self.SSR_module,arguments={'s1':self.stage_num[0],'s2':self.stage_num[1],'s3':self.stage_num[2],'lambda_d':self.lambda_d},name='pred_pose')(ssr_F_Cap_list)
-        
-        model = Model(inputs=img_inputs, outputs=pred_pose)
-        return model
-
-class FSA_net_Var_Capsule(BaseCapsuleFSANet):
-    def __init__(self, image_size,num_classes,stage_num,lambda_d, S_set):
-        super(FSA_net_Var_Capsule, self).__init__(image_size,num_classes,stage_num,lambda_d, S_set)   
-        
-    def __call__(self):
-        logging.debug("Creating model...")
-
+        # build models
         img_inputs = Input(self._input_shape)
         ssr_G_model = self.ssr_G_model_build(img_inputs)
-        def ssr_feat_S_model_build(num_primcaps, m_dim):
-            input_preS = Input((8,8,64))
-
-            #feat_preS = Conv2D(1,(1,1),padding='same',activation='sigmoid')(input_preS)
-            def var(x):
-                mean, var = tf.nn.moments(x,axes=-1)
-                return var
-            feat_preS = Lambda(var)(input_preS)
-            feat_preS = Reshape((-1,))(feat_preS)
-            SR_matrix = Dense(m_dim*(8*8+8*8+8*8),activation='sigmoid')(feat_preS)
-            SR_matrix = Reshape((m_dim,(8*8+8*8+8*8)))(SR_matrix)
-            
-            ssr_feat_S_model = Model(inputs=input_preS,outputs=[SR_matrix,feat_preS],name='feat_S_model')
-            return ssr_feat_S_model
-
-        ssr_feat_S_model = ssr_feat_S_model_build(self.num_primcaps,self.m_dim)  
-        #-------------------------------------------------------------------------------------------------------------------------
-        def ssr_S_model_build(num_primcaps, m_dim):
-            input_s1_preS = Input((8,8,64))
-            input_s2_preS = Input((8,8,64))
-            input_s3_preS = Input((8,8,64))
-
-            SR_matrix_s1,feat_s1_preS = ssr_feat_S_model(input_s1_preS)
-            SR_matrix_s2,feat_s2_preS = ssr_feat_S_model(input_s2_preS)
-            SR_matrix_s3,feat_s3_preS = ssr_feat_S_model(input_s3_preS)
-            
-            feat_pre_concat = Concatenate()([feat_s1_preS,feat_s2_preS,feat_s3_preS])
-            SL_matrix = Dense(int(num_primcaps/3)*m_dim,activation='sigmoid')(feat_pre_concat)
-            SL_matrix = Reshape((int(num_primcaps/3),m_dim))(SL_matrix)
-            
-            S_matrix_s1 = Lambda(lambda x: tf.matmul(x[0],x[1]),name='S_matrix_s1')([SL_matrix,SR_matrix_s1])
-            S_matrix_s2 = Lambda(lambda x: tf.matmul(x[0],x[1]),name='S_matrix_s2')([SL_matrix,SR_matrix_s2])
-            S_matrix_s3 = Lambda(lambda x: tf.matmul(x[0],x[1]),name='S_matrix_s3')([SL_matrix,SR_matrix_s3])
-
-            # Very important!!! Without this training won't converge.
-            # norm_S = Lambda(lambda x: K.tile(K.sum(x,axis=-1,keepdims=True),(1,1,64)))(S_matrix)
-            norm_S_s1 = Lambda(lambda x: K.tile(K.sum(x,axis=-1,keepdims=True),(1,1,64)))(S_matrix_s1)
-            norm_S_s2 = Lambda(lambda x: K.tile(K.sum(x,axis=-1,keepdims=True),(1,1,64)))(S_matrix_s2)
-            norm_S_s3 = Lambda(lambda x: K.tile(K.sum(x,axis=-1,keepdims=True),(1,1,64)))(S_matrix_s3)
-
-            feat_s1_pre = Reshape((-1,64))(input_s1_preS)
-            feat_s2_pre = Reshape((-1,64))(input_s2_preS)
-            feat_s3_pre = Reshape((-1,64))(input_s3_preS)
-            feat_pre_concat = Concatenate(axis=1)([feat_s1_pre, feat_s2_pre, feat_s3_pre])
-            
-            # Warining: don't use keras's 'K.dot'. It is very weird when high dimension is used.
-            # https://github.com/keras-team/keras/issues/9779
-            # Make sure 'tf.matmul' is used
-            # primcaps = Lambda(lambda x: tf.matmul(x[0],x[1])/x[2])([S_matrix,feat_pre_concat, norm_S])
-            primcaps_s1 = Lambda(lambda x: tf.matmul(x[0],x[1])/x[2])([S_matrix_s1,feat_pre_concat, norm_S_s1])
-            primcaps_s2 = Lambda(lambda x: tf.matmul(x[0],x[1])/x[2])([S_matrix_s2,feat_pre_concat, norm_S_s2])
-            primcaps_s3 = Lambda(lambda x: tf.matmul(x[0],x[1])/x[2])([S_matrix_s3,feat_pre_concat, norm_S_s3])
-            primcaps = Concatenate(axis=1)([primcaps_s1,primcaps_s2,primcaps_s3])
-
-            ssr_S_model = Model(inputs=[input_s1_preS, input_s2_preS, input_s3_preS],outputs=primcaps, name='ssr_S_model')
-            return ssr_S_model
-        
-        ssr_S_model = ssr_S_model_build(self.num_primcaps,self.m_dim)        
-        #-------------------------------------------------------------------------------------------------------------------------   
-        ssr_Cap_model = self.ssr_Cap_model_build((self.num_primcaps,64))
-        #-------------------------------------------------------------------------------------------------------------------------
-        ssr_F_Cap_model = self.ssr_F_model_build(self.F_shape,'ssr_F_Cap_model')
-        #-------------------------------------------------------------------------------------------------------------------------
-        ssr_G_list = ssr_G_model(img_inputs)
-        ssr_primcaps = ssr_S_model(ssr_G_list)
-        ssr_Cap_list = ssr_Cap_model(ssr_primcaps)
-        ssr_F_Cap_list = ssr_F_Cap_model(ssr_Cap_list)
-        pred_pose = Lambda(self.SSR_module,arguments={'s1':self.stage_num[0],'s2':self.stage_num[1],'s3':self.stage_num[2],'lambda_d':self.lambda_d},name='pred_pose')(ssr_F_Cap_list)
-
-        model = Model(inputs=img_inputs, outputs=pred_pose)
-        return model
-
-class FSA_net_noS_Capsule(BaseCapsuleFSANet):
-    def __init__(self, image_size,num_classes,stage_num,lambda_d, S_set):
-        super(FSA_net_noS_Capsule, self).__init__(image_size,num_classes,stage_num,lambda_d, S_set)   
-        
-    def __call__(self):
-        logging.debug("Creating model...")
-
-        img_inputs = Input(self._input_shape)
-        ssr_G_model = self.ssr_G_model_build(img_inputs)
-        #-------------------------------------------------------------------------------------------------------------------------
-        def ssr_S_model_build():
-            input_s1_preS = Input((8,8,64))
-            input_s2_preS = Input((8,8,64))
-            input_s3_preS = Input((8,8,64))
-
-            primcaps_s1 = Reshape((8*8,64))(input_s1_preS)
-            primcaps_s2 = Reshape((8*8,64))(input_s2_preS)
-            primcaps_s3 = Reshape((8*8,64))(input_s3_preS)
-
-            primcaps = Concatenate(axis=1)([primcaps_s1,primcaps_s2,primcaps_s3])
-
-            ssr_S_model = Model(inputs=[input_s1_preS, input_s2_preS, input_s3_preS],outputs=primcaps, name='ssr_S_model')
-            return ssr_S_model
-        
-        ssr_S_model = ssr_S_model_build()        
-        #------------------------------------------------------------------------------------------------------------------------- 
-        ssr_Cap_model = self.ssr_Cap_model_build((self.num_primcaps,64))
-        #-------------------------------------------------------------------------------------------------------------------------
-        ssr_F_Cap_model = self.ssr_F_model_build(self.F_shape,'ssr_F_Cap_model')
-        #-------------------------------------------------------------------------------------------------------------------------
-        ssr_G_list = ssr_G_model(img_inputs)
-        ssr_primcaps = ssr_S_model(ssr_G_list)
-        ssr_Cap_list = ssr_Cap_model(ssr_primcaps)
-        ssr_F_Cap_list = ssr_F_Cap_model(ssr_Cap_list)
-        pred_pose = Lambda(self.SSR_module,arguments={'s1':self.stage_num[0],'s2':self.stage_num[1],'s3':self.stage_num[2],'lambda_d':self.lambda_d},name='pred_pose')(ssr_F_Cap_list)
-
-        model = Model(inputs=img_inputs, outputs=pred_pose)
-        return model
-
-class FSA_net_Capsule_FC(BaseCapsuleFSANet):
-    def __init__(self, image_size,num_classes,stage_num,lambda_d, S_set):
-        super(FSA_net_Capsule_FC, self).__init__(image_size,num_classes,stage_num,lambda_d, S_set)  
-        
-    def __call__(self):
-        logging.debug("Creating model...")
-
-        img_inputs = Input(self._input_shape)
-        ssr_G_model = self.ssr_G_model_build(img_inputs)
-        def ssr_feat_S_model_build(num_primcaps, m_dim):
-            input_preS = Input((8,8,64))
-
-            feat_preS = Conv2D(1,(1,1),padding='same',activation='sigmoid')(input_preS)
-            feat_preS = Reshape((-1,))(feat_preS)
-            SR_matrix = Dense(m_dim*(8*8+8*8+8*8),activation='sigmoid')(feat_preS)
-            SR_matrix = Reshape((m_dim,(8*8+8*8+8*8)))(SR_matrix)
-            
-            ssr_feat_S_model = Model(inputs=input_preS,outputs=[SR_matrix,feat_preS],name='feat_S_model')
-            return ssr_feat_S_model
-
-        ssr_feat_S_model = ssr_feat_S_model_build(self.num_primcaps,self.m_dim)  
-        #-------------------------------------------------------------------------------------------------------------------------
-        def ssr_S_model_build(num_primcaps, m_dim):
-            input_s1_preS = Input((8,8,64))
-            input_s2_preS = Input((8,8,64))
-            input_s3_preS = Input((8,8,64))
-
-            SR_matrix_s1,feat_s1_preS = ssr_feat_S_model(input_s1_preS)
-            SR_matrix_s2,feat_s2_preS = ssr_feat_S_model(input_s2_preS)
-            SR_matrix_s3,feat_s3_preS = ssr_feat_S_model(input_s3_preS)
-            
-            feat_pre_concat = Concatenate()([feat_s1_preS,feat_s2_preS,feat_s3_preS])
-            SL_matrix = Dense(int(num_primcaps/3)*m_dim,activation='sigmoid')(feat_pre_concat)
-            SL_matrix = Reshape((int(num_primcaps/3),m_dim))(SL_matrix)
-            
-            S_matrix_s1 = Lambda(lambda x: tf.matmul(x[0],x[1]),name='S_matrix_s1')([SL_matrix,SR_matrix_s1])
-            S_matrix_s2 = Lambda(lambda x: tf.matmul(x[0],x[1]),name='S_matrix_s2')([SL_matrix,SR_matrix_s2])
-            S_matrix_s3 = Lambda(lambda x: tf.matmul(x[0],x[1]),name='S_matrix_s3')([SL_matrix,SR_matrix_s3])
-
-            # Very important!!! Without this training won't converge.
-            # norm_S = Lambda(lambda x: K.tile(K.sum(x,axis=-1,keepdims=True),(1,1,64)))(S_matrix)
-            norm_S_s1 = Lambda(lambda x: K.tile(K.sum(x,axis=-1,keepdims=True),(1,1,64)))(S_matrix_s1)
-            norm_S_s2 = Lambda(lambda x: K.tile(K.sum(x,axis=-1,keepdims=True),(1,1,64)))(S_matrix_s2)
-            norm_S_s3 = Lambda(lambda x: K.tile(K.sum(x,axis=-1,keepdims=True),(1,1,64)))(S_matrix_s3)
-
-            feat_s1_pre = Reshape((-1,64))(input_s1_preS)
-            feat_s2_pre = Reshape((-1,64))(input_s2_preS)
-            feat_s3_pre = Reshape((-1,64))(input_s3_preS)
-            feat_pre_concat = Concatenate(axis=1)([feat_s1_pre, feat_s2_pre, feat_s3_pre])
-            
-            # Warining: don't use keras's 'K.dot'. It is very weird when high dimension is used.
-            # https://github.com/keras-team/keras/issues/9779
-            # Make sure 'tf.matmul' is used
-            # primcaps = Lambda(lambda x: tf.matmul(x[0],x[1])/x[2])([S_matrix,feat_pre_concat, norm_S])
-            primcaps_s1 = Lambda(lambda x: tf.matmul(x[0],x[1])/x[2])([S_matrix_s1,feat_pre_concat, norm_S_s1])
-            primcaps_s2 = Lambda(lambda x: tf.matmul(x[0],x[1])/x[2])([S_matrix_s2,feat_pre_concat, norm_S_s2])
-            primcaps_s3 = Lambda(lambda x: tf.matmul(x[0],x[1])/x[2])([S_matrix_s3,feat_pre_concat, norm_S_s3])
-            primcaps = Concatenate(axis=1)([primcaps_s1,primcaps_s2,primcaps_s3])
-
-            ssr_S_model = Model(inputs=[input_s1_preS, input_s2_preS, input_s3_preS],outputs=primcaps, name='ssr_S_model')
-            return ssr_S_model
-        
-        ssr_S_model = ssr_S_model_build(self.num_primcaps,self.m_dim)        
-        #-------------------------------------------------------------------------------------------------------------------------
-        ssr_Cap_model = self.ssr_Cap_model_build((self.num_primcaps,64))
-        #-------------------------------------------------------------------------------------------------------------------------
-        ssr_F_Cap_model = self.ssr_FC_model_build(self.F_shape,'ssr_F_Cap_model')
-        #-------------------------------------------------------------------------------------------------------------------------
-        ssr_G_list = ssr_G_model(img_inputs)
-        ssr_primcaps = ssr_S_model(ssr_G_list)
-        ssr_Cap_list = ssr_Cap_model(ssr_primcaps)
-        ssr_F_Cap_list = ssr_F_Cap_model(ssr_Cap_list)
-        pred_pose = Lambda(self.SSR_module,arguments={'s1':self.stage_num[0],'s2':self.stage_num[1],'s3':self.stage_num[2],'lambda_d':self.lambda_d},name='pred_pose')(ssr_F_Cap_list)
-        
-        model = Model(inputs=img_inputs, outputs=pred_pose)
-        return model
-
-class FSA_net_Var_Capsule_FC(BaseCapsuleFSANet):
-    def __init__(self, image_size,num_classes,stage_num,lambda_d, S_set):
-        super(FSA_net_Var_Capsule_FC, self).__init__(image_size,num_classes,stage_num,lambda_d, S_set)
-
-        
-    def __call__(self):
-        logging.debug("Creating model...")
-
-        img_inputs = Input(self._input_shape)
-        ssr_G_model = self.ssr_G_model_build(img_inputs)
-        def ssr_feat_S_model_build(num_primcaps, m_dim):
-            input_preS = Input((8,8,64))
-
-            #feat_preS = Conv2D(1,(1,1),padding='same',activation='sigmoid')(input_preS)
-            def var(x):
-                mean, var = tf.nn.moments(x,axes=-1)
-                return var
-            feat_preS = Lambda(var)(input_preS)
-            feat_preS = Reshape((-1,))(feat_preS)
-            SR_matrix = Dense(m_dim*(8*8+8*8+8*8),activation='sigmoid')(feat_preS)
-            SR_matrix = Reshape((m_dim,(8*8+8*8+8*8)))(SR_matrix)
-            
-            ssr_feat_S_model = Model(inputs=input_preS,outputs=[SR_matrix,feat_preS],name='feat_S_model')
-            return ssr_feat_S_model
-
-        ssr_feat_S_model = ssr_feat_S_model_build(self.num_primcaps,self.m_dim)  
-        #-------------------------------------------------------------------------------------------------------------------------
-        def ssr_S_model_build(num_primcaps, m_dim):
-            input_s1_preS = Input((8,8,64))
-            input_s2_preS = Input((8,8,64))
-            input_s3_preS = Input((8,8,64))
-
-            SR_matrix_s1,feat_s1_preS = ssr_feat_S_model(input_s1_preS)
-            SR_matrix_s2,feat_s2_preS = ssr_feat_S_model(input_s2_preS)
-            SR_matrix_s3,feat_s3_preS = ssr_feat_S_model(input_s3_preS)
-            
-            feat_pre_concat = Concatenate()([feat_s1_preS,feat_s2_preS,feat_s3_preS])
-            SL_matrix = Dense(int(num_primcaps/3)*m_dim,activation='sigmoid')(feat_pre_concat)
-            SL_matrix = Reshape((int(num_primcaps/3),m_dim))(SL_matrix)
-            
-            S_matrix_s1 = Lambda(lambda x: tf.matmul(x[0],x[1]),name='S_matrix_s1')([SL_matrix,SR_matrix_s1])
-            S_matrix_s2 = Lambda(lambda x: tf.matmul(x[0],x[1]),name='S_matrix_s2')([SL_matrix,SR_matrix_s2])
-            S_matrix_s3 = Lambda(lambda x: tf.matmul(x[0],x[1]),name='S_matrix_s3')([SL_matrix,SR_matrix_s3])
-
-            # Very important!!! Without this training won't converge.
-            # norm_S = Lambda(lambda x: K.tile(K.sum(x,axis=-1,keepdims=True),(1,1,64)))(S_matrix)
-            norm_S_s1 = Lambda(lambda x: K.tile(K.sum(x,axis=-1,keepdims=True),(1,1,64)))(S_matrix_s1)
-            norm_S_s2 = Lambda(lambda x: K.tile(K.sum(x,axis=-1,keepdims=True),(1,1,64)))(S_matrix_s2)
-            norm_S_s3 = Lambda(lambda x: K.tile(K.sum(x,axis=-1,keepdims=True),(1,1,64)))(S_matrix_s3)
-
-            feat_s1_pre = Reshape((-1,64))(input_s1_preS)
-            feat_s2_pre = Reshape((-1,64))(input_s2_preS)
-            feat_s3_pre = Reshape((-1,64))(input_s3_preS)
-            feat_pre_concat = Concatenate(axis=1)([feat_s1_pre, feat_s2_pre, feat_s3_pre])
-            
-            # Warining: don't use keras's 'K.dot'. It is very weird when high dimension is used.
-            # https://github.com/keras-team/keras/issues/9779
-            # Make sure 'tf.matmul' is used
-            # primcaps = Lambda(lambda x: tf.matmul(x[0],x[1])/x[2])([S_matrix,feat_pre_concat, norm_S])
-            primcaps_s1 = Lambda(lambda x: tf.matmul(x[0],x[1])/x[2])([S_matrix_s1,feat_pre_concat, norm_S_s1])
-            primcaps_s2 = Lambda(lambda x: tf.matmul(x[0],x[1])/x[2])([S_matrix_s2,feat_pre_concat, norm_S_s2])
-            primcaps_s3 = Lambda(lambda x: tf.matmul(x[0],x[1])/x[2])([S_matrix_s3,feat_pre_concat, norm_S_s3])
-            primcaps = Concatenate(axis=1)([primcaps_s1,primcaps_s2,primcaps_s3])
-
-            ssr_S_model = Model(inputs=[input_s1_preS, input_s2_preS, input_s3_preS],outputs=primcaps, name='ssr_S_model')
-            return ssr_S_model
-        
-        ssr_S_model = ssr_S_model_build(self.num_primcaps,self.m_dim)        
-        #-------------------------------------------------------------------------------------------------------------------------
-        ssr_Cap_model = self.ssr_Cap_model_build((self.num_primcaps,64))
-        #-------------------------------------------------------------------------------------------------------------------------
-        ssr_F_Cap_model = self.ssr_FC_model_build(self.F_shape,'ssr_F_Cap_model')
-        #-------------------------------------------------------------------------------------------------------------------------
-        ssr_G_list = ssr_G_model(img_inputs)
-        ssr_primcaps = ssr_S_model(ssr_G_list)
-        ssr_Cap_list = ssr_Cap_model(ssr_primcaps)
-        ssr_F_Cap_list = ssr_F_Cap_model(ssr_Cap_list)
-        pred_pose = Lambda(self.SSR_module,arguments={'s1':self.stage_num[0],'s2':self.stage_num[1],'s3':self.stage_num[2],'lambda_d':self.lambda_d},name='pred_pose')(ssr_F_Cap_list)
-        
-        model = Model(inputs=img_inputs, outputs=pred_pose)
-        return model
-
-class FSA_net_noS_Capsule_FC(BaseCapsuleFSANet):
-    def __init__(self, image_size,num_classes,stage_num,lambda_d, S_set):
-        super(FSA_net_noS_Capsule_FC, self).__init__(image_size,num_classes,stage_num,lambda_d, S_set)
-        
-    def __call__(self):
-        logging.debug("Creating model...")
-
-        img_inputs = Input(self._input_shape)
-        ssr_G_model = self.ssr_G_model_build(img_inputs)
-        #-------------------------------------------------------------------------------------------------------------------------
-        def ssr_S_model_build():
-            input_s1_preS = Input((8,8,64))
-            input_s2_preS = Input((8,8,64))
-            input_s3_preS = Input((8,8,64))
-
-            primcaps_s1 = Reshape((8*8,64))(input_s1_preS)
-            primcaps_s2 = Reshape((8*8,64))(input_s2_preS)
-            primcaps_s3 = Reshape((8*8,64))(input_s3_preS)
-
-            primcaps = Concatenate(axis=1)([primcaps_s1,primcaps_s2,primcaps_s3])
-
-            ssr_S_model = Model(inputs=[input_s1_preS, input_s2_preS, input_s3_preS],outputs=primcaps, name='ssr_S_model')
-            return ssr_S_model
-        
-        ssr_S_model = ssr_S_model_build()        
-        #-------------------------------------------------------------------------------------------------------------------------
-        ssr_Cap_model = self.ssr_Cap_model_build((self.num_primcaps,64))
-        #-------------------------------------------------------------------------------------------------------------------------
-        ssr_F_Cap_model = self.ssr_FC_model_build(self.F_shape,'ssr_F_Cap_model')
-        #-------------------------------------------------------------------------------------------------------------------------
-        ssr_G_list = ssr_G_model(img_inputs)
-        ssr_primcaps = ssr_S_model(ssr_G_list)
-        ssr_Cap_list = ssr_Cap_model(ssr_primcaps)
-        ssr_F_Cap_list = ssr_F_Cap_model(ssr_Cap_list)
-        pred_pose = Lambda(self.SSR_module,arguments={'s1':self.stage_num[0],'s2':self.stage_num[1],'s3':self.stage_num[2],'lambda_d':self.lambda_d},name='pred_pose')(ssr_F_Cap_list)
-        
-        model = Model(inputs=img_inputs, outputs=pred_pose)
-        return model
-
-class FSA_net_NetVLAD(BaseNetVLADFSANet):
-    def __init__(self, image_size,num_classes,stage_num,lambda_d, S_set):
-        super(FSA_net_NetVLAD, self).__init__(image_size,num_classes,stage_num,lambda_d, S_set)
-
-    def __call__(self):
-        logging.debug("Creating model...")
-
-        img_inputs = Input(self._input_shape)
-        ssr_G_model = self.ssr_G_model_build(img_inputs)
-        def ssr_feat_S_model_build(num_primcaps, m_dim):
-            input_preS = Input((8,8,64))
-
-            feat_preS = Conv2D(1,(1,1),padding='same',activation='sigmoid')(input_preS)
-            feat_preS = Reshape((-1,))(feat_preS)
-            SR_matrix = Dense(m_dim*(8*8+8*8+8*8),activation='sigmoid')(feat_preS)
-            SR_matrix = Reshape((m_dim,(8*8+8*8+8*8)))(SR_matrix)
-            
-            ssr_feat_S_model = Model(inputs=input_preS,outputs=[SR_matrix,feat_preS],name='feat_S_model')
-            return ssr_feat_S_model
-
-        ssr_feat_S_model = ssr_feat_S_model_build(self.num_primcaps,self.m_dim)  
-        #-------------------------------------------------------------------------------------------------------------------------
-        def ssr_S_model_build(num_primcaps, m_dim):
-            input_s1_preS = Input((8,8,64))
-            input_s2_preS = Input((8,8,64))
-            input_s3_preS = Input((8,8,64))
-
-            SR_matrix_s1,feat_s1_preS = ssr_feat_S_model(input_s1_preS)
-            SR_matrix_s2,feat_s2_preS = ssr_feat_S_model(input_s2_preS)
-            SR_matrix_s3,feat_s3_preS = ssr_feat_S_model(input_s3_preS)
-            
-            feat_pre_concat = Concatenate()([feat_s1_preS,feat_s2_preS,feat_s3_preS])
-            SL_matrix = Dense(int(num_primcaps/3)*m_dim,activation='sigmoid')(feat_pre_concat)
-            SL_matrix = Reshape((int(num_primcaps/3),m_dim))(SL_matrix)
-            
-            S_matrix_s1 = Lambda(lambda x: tf.matmul(x[0],x[1]),name='S_matrix_s1')([SL_matrix,SR_matrix_s1])
-            S_matrix_s2 = Lambda(lambda x: tf.matmul(x[0],x[1]),name='S_matrix_s2')([SL_matrix,SR_matrix_s2])
-            S_matrix_s3 = Lambda(lambda x: tf.matmul(x[0],x[1]),name='S_matrix_s3')([SL_matrix,SR_matrix_s3])
-
-            # Very important!!! Without this training won't converge.
-            # norm_S = Lambda(lambda x: K.tile(K.sum(x,axis=-1,keepdims=True),(1,1,64)))(S_matrix)
-            norm_S_s1 = Lambda(lambda x: K.tile(K.sum(x,axis=-1,keepdims=True),(1,1,64)))(S_matrix_s1)
-            norm_S_s2 = Lambda(lambda x: K.tile(K.sum(x,axis=-1,keepdims=True),(1,1,64)))(S_matrix_s2)
-            norm_S_s3 = Lambda(lambda x: K.tile(K.sum(x,axis=-1,keepdims=True),(1,1,64)))(S_matrix_s3)
-
-            feat_s1_pre = Reshape((-1,64))(input_s1_preS)
-            feat_s2_pre = Reshape((-1,64))(input_s2_preS)
-            feat_s3_pre = Reshape((-1,64))(input_s3_preS)
-            feat_pre_concat = Concatenate(axis=1)([feat_s1_pre, feat_s2_pre, feat_s3_pre])
-            
-            # Warining: don't use keras's 'K.dot'. It is very weird when high dimension is used.
-            # https://github.com/keras-team/keras/issues/9779
-            # Make sure 'tf.matmul' is used
-            # primcaps = Lambda(lambda x: tf.matmul(x[0],x[1])/x[2])([S_matrix,feat_pre_concat, norm_S])
-            primcaps_s1 = Lambda(lambda x: tf.matmul(x[0],x[1])/x[2])([S_matrix_s1,feat_pre_concat, norm_S_s1])
-            primcaps_s2 = Lambda(lambda x: tf.matmul(x[0],x[1])/x[2])([S_matrix_s2,feat_pre_concat, norm_S_s2])
-            primcaps_s3 = Lambda(lambda x: tf.matmul(x[0],x[1])/x[2])([S_matrix_s3,feat_pre_concat, norm_S_s3])
-            primcaps = Concatenate(axis=1)([primcaps_s1,primcaps_s2,primcaps_s3])
-
-            ssr_S_model = Model(inputs=[input_s1_preS, input_s2_preS, input_s3_preS],outputs=primcaps, name='ssr_S_model')
-            return ssr_S_model
-        
-        ssr_S_model = ssr_S_model_build(self.num_primcaps,self.m_dim)        
-        #-------------------------------------------------------------------------------------------------------------------------        
-        ssr_Agg_model = self.ssr_Agg_model_build((self.num_primcaps,64))
-        #-------------------------------------------------------------------------------------------------------------------------
-        ssr_F_model = self.ssr_F_model_build(self.F_shape,'ssr_F_model')
-        #-------------------------------------------------------------------------------------------------------------------------
-        ssr_G_list = ssr_G_model(img_inputs)
-        ssr_primcaps = ssr_S_model(ssr_G_list)
-        ssr_Agg_list = ssr_Agg_model(ssr_primcaps)
-        ssr_F_list = ssr_F_model(ssr_Agg_list)
-        pred_pose = Lambda(self.SSR_module,arguments={'s1':self.stage_num[0],'s2':self.stage_num[1],'s3':self.stage_num[2],'lambda_d':self.lambda_d},name='pred_pose')(ssr_F_list)
-        
-
-        model = Model(inputs=img_inputs, outputs=pred_pose)
-        return model
-
-class FSA_net_Var_NetVLAD(BaseNetVLADFSANet):
-    def __init__(self, image_size,num_classes,stage_num,lambda_d, S_set):
-        super(FSA_net_Var_NetVLAD, self).__init__(image_size,num_classes,stage_num,lambda_d, S_set)
-            
-    def __call__(self):
-        logging.debug("Creating model...")
-
-        img_inputs = Input(self._input_shape)
-        ssr_G_model = self.ssr_G_model_build(img_inputs)
-        def ssr_feat_S_model_build(num_primcaps, m_dim):
-            input_preS = Input((8,8,64))
-
-            #feat_preS = Conv2D(1,(1,1),padding='same',activation='sigmoid')(input_preS)
-            def var(x):
-                mean, var = tf.nn.moments(x,axes=-1)
-                return var
-            feat_preS = Lambda(var)(input_preS)
-            feat_preS = Reshape((-1,))(feat_preS)
-            SR_matrix = Dense(m_dim*(8*8+8*8+8*8),activation='sigmoid')(feat_preS)
-            SR_matrix = Reshape((m_dim,(8*8+8*8+8*8)))(SR_matrix)
-            
-            ssr_feat_S_model = Model(inputs=input_preS,outputs=[SR_matrix,feat_preS],name='feat_S_model')
-            return ssr_feat_S_model
-
-        ssr_feat_S_model = ssr_feat_S_model_build(self.num_primcaps,self.m_dim)  
-        #-------------------------------------------------------------------------------------------------------------------------
-        def ssr_S_model_build(num_primcaps, m_dim):
-            input_s1_preS = Input((8,8,64))
-            input_s2_preS = Input((8,8,64))
-            input_s3_preS = Input((8,8,64))
-
-            SR_matrix_s1,feat_s1_preS = ssr_feat_S_model(input_s1_preS)
-            SR_matrix_s2,feat_s2_preS = ssr_feat_S_model(input_s2_preS)
-            SR_matrix_s3,feat_s3_preS = ssr_feat_S_model(input_s3_preS)
-            
-            feat_pre_concat = Concatenate()([feat_s1_preS,feat_s2_preS,feat_s3_preS])
-            SL_matrix = Dense(int(num_primcaps/3)*m_dim,activation='sigmoid')(feat_pre_concat)
-            SL_matrix = Reshape((int(num_primcaps/3),m_dim))(SL_matrix)
-            
-            S_matrix_s1 = Lambda(lambda x: tf.matmul(x[0],x[1]),name='S_matrix_s1')([SL_matrix,SR_matrix_s1])
-            S_matrix_s2 = Lambda(lambda x: tf.matmul(x[0],x[1]),name='S_matrix_s2')([SL_matrix,SR_matrix_s2])
-            S_matrix_s3 = Lambda(lambda x: tf.matmul(x[0],x[1]),name='S_matrix_s3')([SL_matrix,SR_matrix_s3])
-
-            # Very important!!! Without this training won't converge.
-            # norm_S = Lambda(lambda x: K.tile(K.sum(x,axis=-1,keepdims=True),(1,1,64)))(S_matrix)
-            norm_S_s1 = Lambda(lambda x: K.tile(K.sum(x,axis=-1,keepdims=True),(1,1,64)))(S_matrix_s1)
-            norm_S_s2 = Lambda(lambda x: K.tile(K.sum(x,axis=-1,keepdims=True),(1,1,64)))(S_matrix_s2)
-            norm_S_s3 = Lambda(lambda x: K.tile(K.sum(x,axis=-1,keepdims=True),(1,1,64)))(S_matrix_s3)
-
-            feat_s1_pre = Reshape((-1,64))(input_s1_preS)
-            feat_s2_pre = Reshape((-1,64))(input_s2_preS)
-            feat_s3_pre = Reshape((-1,64))(input_s3_preS)
-            feat_pre_concat = Concatenate(axis=1)([feat_s1_pre, feat_s2_pre, feat_s3_pre])
-            
-            # Warining: don't use keras's 'K.dot'. It is very weird when high dimension is used.
-            # https://github.com/keras-team/keras/issues/9779
-            # Make sure 'tf.matmul' is used
-            # primcaps = Lambda(lambda x: tf.matmul(x[0],x[1])/x[2])([S_matrix,feat_pre_concat, norm_S])
-            primcaps_s1 = Lambda(lambda x: tf.matmul(x[0],x[1])/x[2])([S_matrix_s1,feat_pre_concat, norm_S_s1])
-            primcaps_s2 = Lambda(lambda x: tf.matmul(x[0],x[1])/x[2])([S_matrix_s2,feat_pre_concat, norm_S_s2])
-            primcaps_s3 = Lambda(lambda x: tf.matmul(x[0],x[1])/x[2])([S_matrix_s3,feat_pre_concat, norm_S_s3])
-            primcaps = Concatenate(axis=1)([primcaps_s1,primcaps_s2,primcaps_s3])
-
-            ssr_S_model = Model(inputs=[input_s1_preS, input_s2_preS, input_s3_preS],outputs=primcaps, name='ssr_S_model')
-            return ssr_S_model
-        
-        ssr_S_model = ssr_S_model_build(self.num_primcaps,self.m_dim)        
-        #-------------------------------------------------------------------------------------------------------------------------
-        ssr_Agg_model = self.ssr_Agg_model_build((self.num_primcaps,64))
-        #-------------------------------------------------------------------------------------------------------------------------
-        ssr_F_model = self.ssr_F_model_build(self.F_shape,'ssr_F_model')
-        #-------------------------------------------------------------------------------------------------------------------------
-        ssr_G_list = ssr_G_model(img_inputs)
-        ssr_primcaps = ssr_S_model(ssr_G_list)
-        ssr_Agg_list = ssr_Agg_model(ssr_primcaps)
-        ssr_F_list = ssr_F_model(ssr_Agg_list)
-        pred_pose = Lambda(self.SSR_module,arguments={'s1':self.stage_num[0],'s2':self.stage_num[1],'s3':self.stage_num[2],'lambda_d':self.lambda_d},name='pred_pose')(ssr_F_list)        
-
-        model = Model(inputs=img_inputs, outputs=pred_pose)
-        return model
-
-class FSA_net_noS_NetVLAD(BaseNetVLADFSANet):
-    def __init__(self, image_size,num_classes,stage_num,lambda_d, S_set):
-        super(FSA_net_noS_NetVLAD, self).__init__(image_size,num_classes,stage_num,lambda_d, S_set)
-
-            
-    def __call__(self):
-        logging.debug("Creating model...")
-
-        img_inputs = Input(self._input_shape)
-        ssr_G_model = self.ssr_G_model_build(img_inputs)
-        #-------------------------------------------------------------------------------------------------------------------------
-        def ssr_S_model_build():
-            input_s1_preS = Input((8,8,64))
-            input_s2_preS = Input((8,8,64))
-            input_s3_preS = Input((8,8,64))
-
-            primcaps_s1 = Reshape((8*8,64))(input_s1_preS)
-            primcaps_s2 = Reshape((8*8,64))(input_s2_preS)
-            primcaps_s3 = Reshape((8*8,64))(input_s3_preS)
-            primcaps = Concatenate(axis=1)([primcaps_s1,primcaps_s2,primcaps_s3])
-
-            ssr_S_model = Model(inputs=[input_s1_preS, input_s2_preS, input_s3_preS],outputs=primcaps, name='ssr_S_model')
-            return ssr_S_model
-        
-        ssr_S_model = ssr_S_model_build()        
-        #-------------------------------------------------------------------------------------------------------------------------
-        ssr_Agg_model = self.ssr_Agg_model_build((self.num_primcaps,64))
-        #-------------------------------------------------------------------------------------------------------------------------
-        ssr_F_model = self.ssr_F_model_build(self.F_shape,'ssr_F_model')
-        #-------------------------------------------------------------------------------------------------------------------------
-        ssr_G_list = ssr_G_model(img_inputs)
-        ssr_primcaps = ssr_S_model(ssr_G_list)
-        ssr_Agg_list = ssr_Agg_model(ssr_primcaps)
-        ssr_F_list = ssr_F_model(ssr_Agg_list)
-        pred_pose = Lambda(self.SSR_module,arguments={'s1':self.stage_num[0],'s2':self.stage_num[1],'s3':self.stage_num[2],'lambda_d':self.lambda_d},name='pred_pose')(ssr_F_list)        
-
-        model = Model(inputs=img_inputs, outputs=pred_pose)
-        return model
-
-class FSA_net_NetVLAD_FC(BaseNetVLADFSANet):
-    def __init__(self, image_size,num_classes,stage_num,lambda_d, S_set):
-        super(FSA_net_NetVLAD_FC, self).__init__(image_size,num_classes,stage_num,lambda_d, S_set)
-
-    def __call__(self):
-        logging.debug("Creating model...")
-
-        img_inputs = Input(self._input_shape)
-        ssr_G_model = self.ssr_G_model_build(img_inputs)
-        def ssr_feat_S_model_build(num_primcaps, m_dim):
-            input_preS = Input((8,8,64))
-
-            feat_preS = Conv2D(1,(1,1),padding='same',activation='sigmoid')(input_preS)
-            feat_preS = Reshape((-1,))(feat_preS)
-            SR_matrix = Dense(m_dim*(8*8+8*8+8*8),activation='sigmoid')(feat_preS)
-            SR_matrix = Reshape((m_dim,(8*8+8*8+8*8)))(SR_matrix)
-            
-            ssr_feat_S_model = Model(inputs=input_preS,outputs=[SR_matrix,feat_preS],name='feat_S_model')
-            return ssr_feat_S_model
-
-        ssr_feat_S_model = ssr_feat_S_model_build(self.num_primcaps,self.m_dim)  
-        #-------------------------------------------------------------------------------------------------------------------------
-        def ssr_S_model_build(num_primcaps, m_dim):
-            input_s1_preS = Input((8,8,64))
-            input_s2_preS = Input((8,8,64))
-            input_s3_preS = Input((8,8,64))
-
-            SR_matrix_s1,feat_s1_preS = ssr_feat_S_model(input_s1_preS)
-            SR_matrix_s2,feat_s2_preS = ssr_feat_S_model(input_s2_preS)
-            SR_matrix_s3,feat_s3_preS = ssr_feat_S_model(input_s3_preS)
-            
-            feat_pre_concat = Concatenate()([feat_s1_preS,feat_s2_preS,feat_s3_preS])
-            SL_matrix = Dense(int(num_primcaps/3)*m_dim,activation='sigmoid')(feat_pre_concat)
-            SL_matrix = Reshape((int(num_primcaps/3),m_dim))(SL_matrix)
-            
-            S_matrix_s1 = Lambda(lambda x: tf.matmul(x[0],x[1]),name='S_matrix_s1')([SL_matrix,SR_matrix_s1])
-            S_matrix_s2 = Lambda(lambda x: tf.matmul(x[0],x[1]),name='S_matrix_s2')([SL_matrix,SR_matrix_s2])
-            S_matrix_s3 = Lambda(lambda x: tf.matmul(x[0],x[1]),name='S_matrix_s3')([SL_matrix,SR_matrix_s3])
-
-            # Very important!!! Without this training won't converge.
-            # norm_S = Lambda(lambda x: K.tile(K.sum(x,axis=-1,keepdims=True),(1,1,64)))(S_matrix)
-            norm_S_s1 = Lambda(lambda x: K.tile(K.sum(x,axis=-1,keepdims=True),(1,1,64)))(S_matrix_s1)
-            norm_S_s2 = Lambda(lambda x: K.tile(K.sum(x,axis=-1,keepdims=True),(1,1,64)))(S_matrix_s2)
-            norm_S_s3 = Lambda(lambda x: K.tile(K.sum(x,axis=-1,keepdims=True),(1,1,64)))(S_matrix_s3)
-
-            feat_s1_pre = Reshape((-1,64))(input_s1_preS)
-            feat_s2_pre = Reshape((-1,64))(input_s2_preS)
-            feat_s3_pre = Reshape((-1,64))(input_s3_preS)
-            feat_pre_concat = Concatenate(axis=1)([feat_s1_pre, feat_s2_pre, feat_s3_pre])
-            
-            # Warining: don't use keras's 'K.dot'. It is very weird when high dimension is used.
-            # https://github.com/keras-team/keras/issues/9779
-            # Make sure 'tf.matmul' is used
-            # primcaps = Lambda(lambda x: tf.matmul(x[0],x[1])/x[2])([S_matrix,feat_pre_concat, norm_S])
-            primcaps_s1 = Lambda(lambda x: tf.matmul(x[0],x[1])/x[2])([S_matrix_s1,feat_pre_concat, norm_S_s1])
-            primcaps_s2 = Lambda(lambda x: tf.matmul(x[0],x[1])/x[2])([S_matrix_s2,feat_pre_concat, norm_S_s2])
-            primcaps_s3 = Lambda(lambda x: tf.matmul(x[0],x[1])/x[2])([S_matrix_s3,feat_pre_concat, norm_S_s3])
-            primcaps = Concatenate(axis=1)([primcaps_s1,primcaps_s2,primcaps_s3])
-
-            ssr_S_model = Model(inputs=[input_s1_preS, input_s2_preS, input_s3_preS],outputs=primcaps, name='ssr_S_model')
-            return ssr_S_model
-        
-        ssr_S_model = ssr_S_model_build(self.num_primcaps,self.m_dim)        
-        #-------------------------------------------------------------------------------------------------------------------------
-        ssr_Agg_model = self.ssr_Agg_model_build((self.num_primcaps,64))
-        #-------------------------------------------------------------------------------------------------------------------------
-        ssr_F_model = self.ssr_FC_model_build(self.F_shape,'ssr_F_model')
-        #-------------------------------------------------------------------------------------------------------------------------     
-        ssr_G_list = ssr_G_model(img_inputs)
-        ssr_primcaps = ssr_S_model(ssr_G_list)
-        ssr_Agg_list = ssr_Agg_model(ssr_primcaps)
-        ssr_F_list = ssr_F_model(ssr_Agg_list)
-        pred_pose = Lambda(self.SSR_module,arguments={'s1':self.stage_num[0],'s2':self.stage_num[1],'s3':self.stage_num[2],'lambda_d':self.lambda_d},name='pred_pose')(ssr_F_list)        
-
-        model = Model(inputs=img_inputs, outputs=pred_pose)
-        return model
-
-class FSA_net_Var_NetVLAD_FC(BaseNetVLADFSANet):
-    def __init__(self, image_size,num_classes,stage_num,lambda_d, S_set):
-        super(FSA_net_Var_NetVLAD_FC, self).__init__(image_size,num_classes,stage_num,lambda_d, S_set)
-
-            
-    def __call__(self):
-        logging.debug("Creating model...")
-
-        img_inputs = Input(self._input_shape)
-        ssr_G_model = self.ssr_G_model_build(img_inputs)
-        def ssr_feat_S_model_build(num_primcaps, m_dim):
-            input_preS = Input((8,8,64))
-
-            #feat_preS = Conv2D(1,(1,1),padding='same',activation='sigmoid')(input_preS)
-            def var(x):
-                mean, var = tf.nn.moments(x,axes=-1)
-                return var
-            feat_preS = Lambda(var)(input_preS)
-            feat_preS = Reshape((-1,))(feat_preS)
-            SR_matrix = Dense(m_dim*(8*8+8*8+8*8),activation='sigmoid')(feat_preS)
-            SR_matrix = Reshape((m_dim,(8*8+8*8+8*8)))(SR_matrix)
-            
-            ssr_feat_S_model = Model(inputs=input_preS,outputs=[SR_matrix,feat_preS],name='feat_S_model')
-            return ssr_feat_S_model
-
-        ssr_feat_S_model = ssr_feat_S_model_build(self.num_primcaps,self.m_dim)  
-        #-------------------------------------------------------------------------------------------------------------------------
-        def ssr_S_model_build(num_primcaps, m_dim):
-            input_s1_preS = Input((8,8,64))
-            input_s2_preS = Input((8,8,64))
-            input_s3_preS = Input((8,8,64))
-
-            SR_matrix_s1,feat_s1_preS = ssr_feat_S_model(input_s1_preS)
-            SR_matrix_s2,feat_s2_preS = ssr_feat_S_model(input_s2_preS)
-            SR_matrix_s3,feat_s3_preS = ssr_feat_S_model(input_s3_preS)
-            
-            feat_pre_concat = Concatenate()([feat_s1_preS,feat_s2_preS,feat_s3_preS])
-            SL_matrix = Dense(int(num_primcaps/3)*m_dim,activation='sigmoid')(feat_pre_concat)
-            SL_matrix = Reshape((int(num_primcaps/3),m_dim))(SL_matrix)
-            
-            S_matrix_s1 = Lambda(lambda x: tf.matmul(x[0],x[1]),name='S_matrix_s1')([SL_matrix,SR_matrix_s1])
-            S_matrix_s2 = Lambda(lambda x: tf.matmul(x[0],x[1]),name='S_matrix_s2')([SL_matrix,SR_matrix_s2])
-            S_matrix_s3 = Lambda(lambda x: tf.matmul(x[0],x[1]),name='S_matrix_s3')([SL_matrix,SR_matrix_s3])
-
-            # Very important!!! Without this training won't converge.
-            # norm_S = Lambda(lambda x: K.tile(K.sum(x,axis=-1,keepdims=True),(1,1,64)))(S_matrix)
-            norm_S_s1 = Lambda(lambda x: K.tile(K.sum(x,axis=-1,keepdims=True),(1,1,64)))(S_matrix_s1)
-            norm_S_s2 = Lambda(lambda x: K.tile(K.sum(x,axis=-1,keepdims=True),(1,1,64)))(S_matrix_s2)
-            norm_S_s3 = Lambda(lambda x: K.tile(K.sum(x,axis=-1,keepdims=True),(1,1,64)))(S_matrix_s3)
-
-            feat_s1_pre = Reshape((-1,64))(input_s1_preS)
-            feat_s2_pre = Reshape((-1,64))(input_s2_preS)
-            feat_s3_pre = Reshape((-1,64))(input_s3_preS)
-            feat_pre_concat = Concatenate(axis=1)([feat_s1_pre, feat_s2_pre, feat_s3_pre])
-            
-            # Warining: don't use keras's 'K.dot'. It is very weird when high dimension is used.
-            # https://github.com/keras-team/keras/issues/9779
-            # Make sure 'tf.matmul' is used
-            # primcaps = Lambda(lambda x: tf.matmul(x[0],x[1])/x[2])([S_matrix,feat_pre_concat, norm_S])
-            primcaps_s1 = Lambda(lambda x: tf.matmul(x[0],x[1])/x[2])([S_matrix_s1,feat_pre_concat, norm_S_s1])
-            primcaps_s2 = Lambda(lambda x: tf.matmul(x[0],x[1])/x[2])([S_matrix_s2,feat_pre_concat, norm_S_s2])
-            primcaps_s3 = Lambda(lambda x: tf.matmul(x[0],x[1])/x[2])([S_matrix_s3,feat_pre_concat, norm_S_s3])
-            primcaps = Concatenate(axis=1)([primcaps_s1,primcaps_s2,primcaps_s3])
-
-            ssr_S_model = Model(inputs=[input_s1_preS, input_s2_preS, input_s3_preS],outputs=primcaps, name='ssr_S_model')
-            return ssr_S_model
-        
-        ssr_S_model = ssr_S_model_build(self.num_primcaps,self.m_dim)        
-        #-------------------------------------------------------------------------------------------------------------------------
-        ssr_Agg_model = self.ssr_Agg_model_build((self.num_primcaps,64))
-        #-------------------------------------------------------------------------------------------------------------------------
-        ssr_F_model = self.ssr_FC_model_build(self.F_shape,'ssr_F_model')
-        #-------------------------------------------------------------------------------------------------------------------------    
-        ssr_G_list = ssr_G_model(img_inputs)
-        ssr_primcaps = ssr_S_model(ssr_G_list)
-        ssr_Agg_list = ssr_Agg_model(ssr_primcaps)
-        ssr_F_list = ssr_F_model(ssr_Agg_list)
-        pred_pose = Lambda(self.SSR_module,arguments={'s1':self.stage_num[0],'s2':self.stage_num[1],'s3':self.stage_num[2],'lambda_d':self.lambda_d},name='pred_pose')(ssr_F_list)        
-
-        model = Model(inputs=img_inputs, outputs=pred_pose)
-        return model
-
-class FSA_net_noS_NetVLAD_FC(BaseNetVLADFSANet):
-    def __init__(self, image_size,num_classes,stage_num,lambda_d, S_set):
-        super(FSA_net_noS_NetVLAD_FC, self).__init__(image_size,num_classes,stage_num,lambda_d, S_set)
-            
-    def __call__(self):
-        logging.debug("Creating model...")
-
-        img_inputs = Input(self._input_shape)
-        ssr_G_model = self.ssr_G_model_build(img_inputs)
-        #-------------------------------------------------------------------------------------------------------------------------
-        def ssr_S_model_build():
-            input_s1_preS = Input((8,8,64))
-            input_s2_preS = Input((8,8,64))
-            input_s3_preS = Input((8,8,64))
-
-            primcaps_s1 = Reshape((8*8,64))(input_s1_preS)
-            primcaps_s2 = Reshape((8*8,64))(input_s2_preS)
-            primcaps_s3 = Reshape((8*8,64))(input_s3_preS)
-            primcaps = Concatenate(axis=1)([primcaps_s1,primcaps_s2,primcaps_s3])
-
-            ssr_S_model = Model(inputs=[input_s1_preS, input_s2_preS, input_s3_preS],outputs=primcaps, name='ssr_S_model')
-            return ssr_S_model
-        
-        ssr_S_model = ssr_S_model_build()        
-        #-------------------------------------------------------------------------------------------------------------------------
-        ssr_Agg_model = self.ssr_Agg_model_build((self.num_primcaps,64))
-        #-------------------------------------------------------------------------------------------------------------------------
-        ssr_F_model = self.ssr_FC_model_build(self.F_shape,'ssr_F_model')
-        #-------------------------------------------------------------------------------------------------------------------------
-        ssr_G_list = ssr_G_model(img_inputs)
-        ssr_primcaps = ssr_S_model(ssr_G_list)
-        ssr_Agg_list = ssr_Agg_model(ssr_primcaps)
-        ssr_F_list = ssr_F_model(ssr_Agg_list)
-        pred_pose = Lambda(self.SSR_module,arguments={'s1':self.stage_num[0],'s2':self.stage_num[1],'s3':self.stage_num[2],'lambda_d':self.lambda_d},name='pred_pose')(ssr_F_list)
-        
-        model = Model(inputs=img_inputs, outputs=pred_pose)
-        return model
-
-class FSA_net_Metric(BaseMetricFSANet):
-    def __init__(self, image_size,num_classes,stage_num,lambda_d, S_set):
-        super(FSA_net_Metric, self).__init__(image_size,num_classes,stage_num,lambda_d, S_set)
-        
-    def __call__(self):
-        logging.debug("Creating model...")
-
-        img_inputs = Input(self._input_shape)
-        ssr_G_model = self.ssr_G_model_build(img_inputs)
-        def ssr_feat_S_model_build(num_primcaps, m_dim):
-            input_preS = Input((8,8,64))
-
-            feat_preS = Conv2D(1,(1,1),padding='same',activation='sigmoid')(input_preS)
-            feat_preS = Reshape((-1,))(feat_preS)
-            SR_matrix = Dense(m_dim*(8*8+8*8+8*8),activation='sigmoid')(feat_preS)
-            SR_matrix = Reshape((m_dim,(8*8+8*8+8*8)))(SR_matrix)
-            
-            ssr_feat_S_model = Model(inputs=input_preS,outputs=[SR_matrix,feat_preS],name='feat_S_model')
-            return ssr_feat_S_model
-
-        ssr_feat_S_model = ssr_feat_S_model_build(self.num_primcaps,self.m_dim)  
-        #-------------------------------------------------------------------------------------------------------------------------
-        def ssr_S_model_build(num_primcaps, m_dim):
-            input_s1_preS = Input((8,8,64))
-            input_s2_preS = Input((8,8,64))
-            input_s3_preS = Input((8,8,64))
-
-            SR_matrix_s1,feat_s1_preS = ssr_feat_S_model(input_s1_preS)
-            SR_matrix_s2,feat_s2_preS = ssr_feat_S_model(input_s2_preS)
-            SR_matrix_s3,feat_s3_preS = ssr_feat_S_model(input_s3_preS)
-            
-            feat_pre_concat = Concatenate()([feat_s1_preS,feat_s2_preS,feat_s3_preS])
-            SL_matrix = Dense(int(num_primcaps/3)*m_dim,activation='sigmoid')(feat_pre_concat)
-            SL_matrix = Reshape((int(num_primcaps/3),m_dim))(SL_matrix)
-            
-            S_matrix_s1 = Lambda(lambda x: tf.matmul(x[0],x[1]),name='S_matrix_s1')([SL_matrix,SR_matrix_s1])
-            S_matrix_s2 = Lambda(lambda x: tf.matmul(x[0],x[1]),name='S_matrix_s2')([SL_matrix,SR_matrix_s2])
-            S_matrix_s3 = Lambda(lambda x: tf.matmul(x[0],x[1]),name='S_matrix_s3')([SL_matrix,SR_matrix_s3])
-
-            # Very important!!! Without this training won't converge.
-            # norm_S = Lambda(lambda x: K.tile(K.sum(x,axis=-1,keepdims=True),(1,1,64)))(S_matrix)
-            norm_S_s1 = Lambda(lambda x: K.tile(K.sum(x,axis=-1,keepdims=True),(1,1,64)))(S_matrix_s1)
-            norm_S_s2 = Lambda(lambda x: K.tile(K.sum(x,axis=-1,keepdims=True),(1,1,64)))(S_matrix_s2)
-            norm_S_s3 = Lambda(lambda x: K.tile(K.sum(x,axis=-1,keepdims=True),(1,1,64)))(S_matrix_s3)
-
-            feat_s1_pre = Reshape((-1,64))(input_s1_preS)
-            feat_s2_pre = Reshape((-1,64))(input_s2_preS)
-            feat_s3_pre = Reshape((-1,64))(input_s3_preS)
-            feat_pre_concat = Concatenate(axis=1)([feat_s1_pre, feat_s2_pre, feat_s3_pre])
-            
-            # Warining: don't use keras's 'K.dot'. It is very weird when high dimension is used.
-            # https://github.com/keras-team/keras/issues/9779
-            # Make sure 'tf.matmul' is used
-            # primcaps = Lambda(lambda x: tf.matmul(x[0],x[1])/x[2])([S_matrix,feat_pre_concat, norm_S])
-            primcaps_s1 = Lambda(lambda x: tf.matmul(x[0],x[1])/x[2])([S_matrix_s1,feat_pre_concat, norm_S_s1])
-            primcaps_s2 = Lambda(lambda x: tf.matmul(x[0],x[1])/x[2])([S_matrix_s2,feat_pre_concat, norm_S_s2])
-            primcaps_s3 = Lambda(lambda x: tf.matmul(x[0],x[1])/x[2])([S_matrix_s3,feat_pre_concat, norm_S_s3])
-            primcaps = Concatenate(axis=1)([primcaps_s1,primcaps_s2,primcaps_s3])
-
-            ssr_S_model = Model(inputs=[input_s1_preS, input_s2_preS, input_s3_preS],outputs=primcaps, name='ssr_S_model')
-            return ssr_S_model
-        
-        ssr_S_model = ssr_S_model_build(self.num_primcaps,self.m_dim)        
-        #-------------------------------------------------------------------------------------------------------------------------
+        ssr_S_model = self.ssr_S_model_build(num_primcaps=self.num_primcaps, m_dim=self.m_dim)        
         ssr_Metric_model = self.ssr_Metric_model_build((self.num_primcaps,64))
-        #-------------------------------------------------------------------------------------------------------------------------
         ssr_F_model = self.ssr_F_model_build(self.F_shape,'ssr_F_model')
-        #-------------------------------------------------------------------------------------------------------------------------
+        
+        # wire models
         ssr_G_list = ssr_G_model(img_inputs)
         ssr_primcaps = ssr_S_model(ssr_G_list)
         ssr_Metric_list = ssr_Metric_model(ssr_primcaps)
         ssr_F_list = ssr_F_model(ssr_Metric_list)
         pred_pose = Lambda(self.SSR_module,arguments={'s1':self.stage_num[0],'s2':self.stage_num[1],'s3':self.stage_num[2],'lambda_d':self.lambda_d},name='pred_pose')(ssr_F_list)
        
-        model = Model(inputs=img_inputs, outputs=pred_pose)
-        return model
+        return Model(inputs=img_inputs, outputs=pred_pose)
+
+class FSA_net_Metric(BaseMetricFSANet):
+    def __init__(self, image_size,num_classes,stage_num,lambda_d, S_set):
+        super(FSA_net_Metric, self).__init__(image_size,num_classes,stage_num,lambda_d, S_set)
+
+    def ssr_feat_S_model_build(self, m_dim):
+        input_preS = Input((8,8,64))
+
+        feat_preS = Conv2D(1,(1,1),padding='same',activation='sigmoid')(input_preS)
+        feat_preS = Reshape((-1,))(feat_preS)
+        SR_matrix = Dense(m_dim*(8*8+8*8+8*8),activation='sigmoid')(feat_preS)
+        SR_matrix = Reshape((m_dim,(8*8+8*8+8*8)))(SR_matrix)
+        
+        return Model(inputs=input_preS,outputs=[SR_matrix,feat_preS],name='feat_S_model')
+
+    def ssr_S_model_build(self, num_primcaps, m_dim):
+        input_s1_preS = Input((8,8,64))
+        input_s2_preS = Input((8,8,64))
+        input_s3_preS = Input((8,8,64))
+
+        feat_S_model = self.ssr_feat_S_model_build(m_dim)
+
+        SR_matrix_s1,feat_s1_preS = feat_S_model(input_s1_preS)
+        SR_matrix_s2,feat_s2_preS = feat_S_model(input_s2_preS)
+        SR_matrix_s3,feat_s3_preS = feat_S_model(input_s3_preS)
+        
+        feat_pre_concat = Concatenate()([feat_s1_preS,feat_s2_preS,feat_s3_preS])
+        SL_matrix = Dense(int(num_primcaps/3)*m_dim,activation='sigmoid')(feat_pre_concat)
+        SL_matrix = Reshape((int(num_primcaps/3),m_dim))(SL_matrix)
+        
+        S_matrix_s1 = Lambda(lambda x: tf.matmul(x[0],x[1]),name='S_matrix_s1')([SL_matrix,SR_matrix_s1])
+        S_matrix_s2 = Lambda(lambda x: tf.matmul(x[0],x[1]),name='S_matrix_s2')([SL_matrix,SR_matrix_s2])
+        S_matrix_s3 = Lambda(lambda x: tf.matmul(x[0],x[1]),name='S_matrix_s3')([SL_matrix,SR_matrix_s3])
+
+        # Very important!!! Without this training won't converge.
+        # norm_S = Lambda(lambda x: K.tile(K.sum(x,axis=-1,keepdims=True),(1,1,64)))(S_matrix)
+        norm_S_s1 = Lambda(lambda x: K.tile(K.sum(x,axis=-1,keepdims=True),(1,1,64)))(S_matrix_s1)
+        norm_S_s2 = Lambda(lambda x: K.tile(K.sum(x,axis=-1,keepdims=True),(1,1,64)))(S_matrix_s2)
+        norm_S_s3 = Lambda(lambda x: K.tile(K.sum(x,axis=-1,keepdims=True),(1,1,64)))(S_matrix_s3)
+
+        feat_s1_pre = Reshape((-1,64))(input_s1_preS)
+        feat_s2_pre = Reshape((-1,64))(input_s2_preS)
+        feat_s3_pre = Reshape((-1,64))(input_s3_preS)
+        feat_pre_concat = Concatenate(axis=1)([feat_s1_pre, feat_s2_pre, feat_s3_pre])
+        
+        # Warining: don't use keras's 'K.dot'. It is very weird when high dimension is used.
+        # https://github.com/keras-team/keras/issues/9779
+        # Make sure 'tf.matmul' is used
+        # primcaps = Lambda(lambda x: tf.matmul(x[0],x[1])/x[2])([S_matrix,feat_pre_concat, norm_S])
+        primcaps_s1 = Lambda(lambda x: tf.matmul(x[0],x[1])/x[2])([S_matrix_s1,feat_pre_concat, norm_S_s1])
+        primcaps_s2 = Lambda(lambda x: tf.matmul(x[0],x[1])/x[2])([S_matrix_s2,feat_pre_concat, norm_S_s2])
+        primcaps_s3 = Lambda(lambda x: tf.matmul(x[0],x[1])/x[2])([S_matrix_s3,feat_pre_concat, norm_S_s3])
+        primcaps = Concatenate(axis=1)([primcaps_s1,primcaps_s2,primcaps_s3])
+
+        return Model(inputs=[input_s1_preS, input_s2_preS, input_s3_preS],outputs=primcaps, name='ssr_S_model')
 
 class FSA_net_Var_Metric(BaseMetricFSANet):
     def __init__(self, image_size,num_classes,stage_num,lambda_d, S_set):
         super(FSA_net_Var_Metric, self).__init__(image_size,num_classes,stage_num,lambda_d, S_set)
+
+    def ssr_feat_S_model_build(self, m_dim):
+        input_preS = Input((8,8,64))
+        def var(x):
+            mean, var = tf.nn.moments(x,axes=-1)
+            return var
+        feat_preS = Lambda(var)(input_preS)
+        feat_preS = Reshape((-1,))(feat_preS)
+        SR_matrix = Dense(m_dim*(8*8+8*8+8*8),activation='sigmoid')(feat_preS)
+        SR_matrix = Reshape((m_dim,(8*8+8*8+8*8)))(SR_matrix)
         
-    def __call__(self):
-        logging.debug("Creating model...")
+        return Model(inputs=input_preS,outputs=[SR_matrix,feat_preS],name='feat_S_model')
 
-        img_inputs = Input(self._input_shape)
-        ssr_G_model = self.ssr_G_model_build(img_inputs)
-        def ssr_feat_S_model_build(num_primcaps, m_dim):
-            input_preS = Input((8,8,64))
+    def ssr_S_model_build(self, num_primcaps, m_dim):
+        input_s1_preS = Input((8,8,64))
+        input_s2_preS = Input((8,8,64))
+        input_s3_preS = Input((8,8,64))
 
-            #feat_preS = Conv2D(1,(1,1),padding='same',activation='sigmoid')(input_preS)
-            def var(x):
-                mean, var = tf.nn.moments(x,axes=-1)
-                return var
-            feat_preS = Lambda(var)(input_preS)
-            feat_preS = Reshape((-1,))(feat_preS)
-            SR_matrix = Dense(m_dim*(8*8+8*8+8*8),activation='sigmoid')(feat_preS)
-            SR_matrix = Reshape((m_dim,(8*8+8*8+8*8)))(SR_matrix)
-            
-            ssr_feat_S_model = Model(inputs=input_preS,outputs=[SR_matrix,feat_preS],name='feat_S_model')
-            return ssr_feat_S_model
+        feat_S_model = self.ssr_feat_S_model_build(m_dim)
 
-        ssr_feat_S_model = ssr_feat_S_model_build(self.num_primcaps,self.m_dim)  
-        #-------------------------------------------------------------------------------------------------------------------------
-        def ssr_S_model_build(num_primcaps, m_dim):
-            input_s1_preS = Input((8,8,64))
-            input_s2_preS = Input((8,8,64))
-            input_s3_preS = Input((8,8,64))
-
-            SR_matrix_s1,feat_s1_preS = ssr_feat_S_model(input_s1_preS)
-            SR_matrix_s2,feat_s2_preS = ssr_feat_S_model(input_s2_preS)
-            SR_matrix_s3,feat_s3_preS = ssr_feat_S_model(input_s3_preS)
-            
-            feat_pre_concat = Concatenate()([feat_s1_preS,feat_s2_preS,feat_s3_preS])
-            SL_matrix = Dense(int(num_primcaps/3)*m_dim,activation='sigmoid')(feat_pre_concat)
-            SL_matrix = Reshape((int(num_primcaps/3),m_dim))(SL_matrix)
-            
-            S_matrix_s1 = Lambda(lambda x: tf.matmul(x[0],x[1]),name='S_matrix_s1')([SL_matrix,SR_matrix_s1])
-            S_matrix_s2 = Lambda(lambda x: tf.matmul(x[0],x[1]),name='S_matrix_s2')([SL_matrix,SR_matrix_s2])
-            S_matrix_s3 = Lambda(lambda x: tf.matmul(x[0],x[1]),name='S_matrix_s3')([SL_matrix,SR_matrix_s3])
-
-            # Very important!!! Without this training won't converge.
-            # norm_S = Lambda(lambda x: K.tile(K.sum(x,axis=-1,keepdims=True),(1,1,64)))(S_matrix)
-            norm_S_s1 = Lambda(lambda x: K.tile(K.sum(x,axis=-1,keepdims=True),(1,1,64)))(S_matrix_s1)
-            norm_S_s2 = Lambda(lambda x: K.tile(K.sum(x,axis=-1,keepdims=True),(1,1,64)))(S_matrix_s2)
-            norm_S_s3 = Lambda(lambda x: K.tile(K.sum(x,axis=-1,keepdims=True),(1,1,64)))(S_matrix_s3)
-
-            feat_s1_pre = Reshape((-1,64))(input_s1_preS)
-            feat_s2_pre = Reshape((-1,64))(input_s2_preS)
-            feat_s3_pre = Reshape((-1,64))(input_s3_preS)
-            feat_pre_concat = Concatenate(axis=1)([feat_s1_pre, feat_s2_pre, feat_s3_pre])
-            
-            # Warining: don't use keras's 'K.dot'. It is very weird when high dimension is used.
-            # https://github.com/keras-team/keras/issues/9779
-            # Make sure 'tf.matmul' is used
-            # primcaps = Lambda(lambda x: tf.matmul(x[0],x[1])/x[2])([S_matrix,feat_pre_concat, norm_S])
-            primcaps_s1 = Lambda(lambda x: tf.matmul(x[0],x[1])/x[2])([S_matrix_s1,feat_pre_concat, norm_S_s1])
-            primcaps_s2 = Lambda(lambda x: tf.matmul(x[0],x[1])/x[2])([S_matrix_s2,feat_pre_concat, norm_S_s2])
-            primcaps_s3 = Lambda(lambda x: tf.matmul(x[0],x[1])/x[2])([S_matrix_s3,feat_pre_concat, norm_S_s3])
-            primcaps = Concatenate(axis=1)([primcaps_s1,primcaps_s2,primcaps_s3])
-
-            ssr_S_model = Model(inputs=[input_s1_preS, input_s2_preS, input_s3_preS],outputs=primcaps, name='ssr_S_model')
-            return ssr_S_model
+        SR_matrix_s1,feat_s1_preS = feat_S_model(input_s1_preS)
+        SR_matrix_s2,feat_s2_preS = feat_S_model(input_s2_preS)
+        SR_matrix_s3,feat_s3_preS = feat_S_model(input_s3_preS)
         
-        ssr_S_model = ssr_S_model_build(self.num_primcaps,self.m_dim)        
-        #-------------------------------------------------------------------------------------------------------------------------
-        ssr_Metric_model = self.ssr_Metric_model_build((self.num_primcaps,64))
-        #-------------------------------------------------------------------------------------------------------------------------
-        ssr_F_model = self.ssr_F_model_build(self.F_shape,'ssr_F_model')
-        #-------------------------------------------------------------------------------------------------------------------------     
-        ssr_G_list = ssr_G_model(img_inputs)
-        ssr_primcaps = ssr_S_model(ssr_G_list)
-        ssr_Metric_list = ssr_Metric_model(ssr_primcaps)
-        ssr_F_list = ssr_F_model(ssr_Metric_list)
-        pred_pose = Lambda(self.SSR_module,arguments={'s1':self.stage_num[0],'s2':self.stage_num[1],'s3':self.stage_num[2],'lambda_d':self.lambda_d},name='pred_pose')(ssr_F_list)       
+        feat_pre_concat = Concatenate()([feat_s1_preS,feat_s2_preS,feat_s3_preS])
+        SL_matrix = Dense(int(num_primcaps/3)*m_dim,activation='sigmoid')(feat_pre_concat)
+        SL_matrix = Reshape((int(num_primcaps/3),m_dim))(SL_matrix)
+        
+        S_matrix_s1 = Lambda(lambda x: tf.matmul(x[0],x[1]),name='S_matrix_s1')([SL_matrix,SR_matrix_s1])
+        S_matrix_s2 = Lambda(lambda x: tf.matmul(x[0],x[1]),name='S_matrix_s2')([SL_matrix,SR_matrix_s2])
+        S_matrix_s3 = Lambda(lambda x: tf.matmul(x[0],x[1]),name='S_matrix_s3')([SL_matrix,SR_matrix_s3])
 
-        model = Model(inputs=img_inputs, outputs=pred_pose)
-        return model
+        # Very important!!! Without this training won't converge.
+        # norm_S = Lambda(lambda x: K.tile(K.sum(x,axis=-1,keepdims=True),(1,1,64)))(S_matrix)
+        norm_S_s1 = Lambda(lambda x: K.tile(K.sum(x,axis=-1,keepdims=True),(1,1,64)))(S_matrix_s1)
+        norm_S_s2 = Lambda(lambda x: K.tile(K.sum(x,axis=-1,keepdims=True),(1,1,64)))(S_matrix_s2)
+        norm_S_s3 = Lambda(lambda x: K.tile(K.sum(x,axis=-1,keepdims=True),(1,1,64)))(S_matrix_s3)
+
+        feat_s1_pre = Reshape((-1,64))(input_s1_preS)
+        feat_s2_pre = Reshape((-1,64))(input_s2_preS)
+        feat_s3_pre = Reshape((-1,64))(input_s3_preS)
+        feat_pre_concat = Concatenate(axis=1)([feat_s1_pre, feat_s2_pre, feat_s3_pre])
+        
+        # Warining: don't use keras's 'K.dot'. It is very weird when high dimension is used.
+        # https://github.com/keras-team/keras/issues/9779
+        # Make sure 'tf.matmul' is used
+        # primcaps = Lambda(lambda x: tf.matmul(x[0],x[1])/x[2])([S_matrix,feat_pre_concat, norm_S])
+        primcaps_s1 = Lambda(lambda x: tf.matmul(x[0],x[1])/x[2])([S_matrix_s1,feat_pre_concat, norm_S_s1])
+        primcaps_s2 = Lambda(lambda x: tf.matmul(x[0],x[1])/x[2])([S_matrix_s2,feat_pre_concat, norm_S_s2])
+        primcaps_s3 = Lambda(lambda x: tf.matmul(x[0],x[1])/x[2])([S_matrix_s3,feat_pre_concat, norm_S_s3])
+        primcaps = Concatenate(axis=1)([primcaps_s1,primcaps_s2,primcaps_s3])
+
+        return Model(inputs=[input_s1_preS, input_s2_preS, input_s3_preS],outputs=primcaps, name='ssr_S_model')
         
 class FSA_net_noS_Metric(BaseMetricFSANet):
     def __init__(self, image_size,num_classes,stage_num,lambda_d, S_set):
         super(FSA_net_noS_Metric, self).__init__(image_size,num_classes,stage_num,lambda_d, S_set)
-        
-    def __call__(self):
-        logging.debug("Creating model...")
 
-        img_inputs = Input(self._input_shape)
-        ssr_G_model = self.ssr_G_model_build(img_inputs)
-        #-------------------------------------------------------------------------------------------------------------------------
-        def ssr_S_model_build():
-            input_s1_preS = Input((8,8,64))
-            input_s2_preS = Input((8,8,64))
-            input_s3_preS = Input((8,8,64))
+    def ssr_S_model_build(self, **kwargs):
+        input_s1_preS = Input((8,8,64))
+        input_s2_preS = Input((8,8,64))
+        input_s3_preS = Input((8,8,64))
 
-            primcaps_s1 = Reshape((8*8,64))(input_s1_preS)
-            primcaps_s2 = Reshape((8*8,64))(input_s2_preS)
-            primcaps_s3 = Reshape((8*8,64))(input_s3_preS)
+        primcaps_s1 = Reshape((8*8,64))(input_s1_preS)
+        primcaps_s2 = Reshape((8*8,64))(input_s2_preS)
+        primcaps_s3 = Reshape((8*8,64))(input_s3_preS)
 
-            primcaps = Concatenate(axis=1)([primcaps_s1,primcaps_s2,primcaps_s3])
+        primcaps = Concatenate(axis=1)([primcaps_s1,primcaps_s2,primcaps_s3])
 
-            ssr_S_model = Model(inputs=[input_s1_preS, input_s2_preS, input_s3_preS],outputs=primcaps, name='ssr_S_model')
-            return ssr_S_model
-        
-        ssr_S_model = ssr_S_model_build()        
-        #-------------------------------------------------------------------------------------------------------------------------
-        ssr_Metric_model = self.ssr_Metric_model_build((self.num_primcaps,64))
-        ssr_F_model = self.ssr_F_model_build(self.F_shape,'ssr_F_model')
-        #-------------------------------------------------------------------------------------------------------------------------    
-        ssr_G_list = ssr_G_model(img_inputs)
-        ssr_primcaps = ssr_S_model(ssr_G_list)
-        ssr_Metric_list = ssr_Metric_model(ssr_primcaps)
-        ssr_F_list = ssr_F_model(ssr_Metric_list)
-        pred_pose = Lambda(self.SSR_module,arguments={'s1':self.stage_num[0],'s2':self.stage_num[1],'s3':self.stage_num[2],'lambda_d':self.lambda_d},name='pred_pose')(ssr_F_list)       
+        return Model(inputs=[input_s1_preS, input_s2_preS, input_s3_preS],outputs=primcaps, name='ssr_S_model')
 
-        model = Model(inputs=img_inputs, outputs=pred_pose)
-        return model
 
 
 
