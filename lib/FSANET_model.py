@@ -196,6 +196,34 @@ class BaseCapsuleFSANet(BaseFSANet):
         ssr_Cap_model = Model(inputs=input_primcaps,outputs=[feat_s1_div,feat_s2_div,feat_s3_div], name='ssr_Cap_model')            
         return ssr_Cap_model   
 
+class BaseNetVLADFSANet(BaseFSANet):
+    def __init__(self, image_size,num_classes,stage_num,lambda_d, S_set):
+        super(BaseNetVLADFSANet, self).__init__(image_size,num_classes,stage_num,lambda_d, S_set) 
+
+    def ssr_Agg_model_build(self, shape_primcaps):
+        input_primcaps = Input(shape_primcaps)
+
+        #capsule = CapsuleLayer(self.num_capsule, self.dim_capsule, self.routings, name='caps')(input_primcaps)
+        agg_feat = NetVLAD(feature_size=64, max_samples=self.num_primcaps, cluster_size=self.num_capsule, output_dim=self.num_capsule*self.dim_capsule)(input_primcaps)
+        agg_feat = Reshape((self.num_capsule,self.dim_capsule))(agg_feat)
+
+        s1_a = 0
+        s1_b = self.num_capsule//3
+        feat_s1_div = Lambda(lambda x: x[:,s1_a:s1_b,:])(agg_feat)
+        s2_a = self.num_capsule//3
+        s2_b = 2*self.num_capsule//3
+        feat_s2_div = Lambda(lambda x: x[:,s2_a:s2_b,:])(agg_feat)
+        s3_a = 2*self.num_capsule//3
+        s3_b = self.num_capsule
+        feat_s3_div = Lambda(lambda x: x[:,s3_a:s3_b,:])(agg_feat)
+
+        feat_s1_div = Reshape((-1,))(feat_s1_div)
+        feat_s2_div = Reshape((-1,))(feat_s2_div)
+        feat_s3_div = Reshape((-1,))(feat_s3_div)
+        
+        ssr_Agg_model = Model(inputs=input_primcaps,outputs=[feat_s1_div,feat_s2_div,feat_s3_div], name='ssr_Agg_model')            
+        return ssr_Agg_model 
+
 
 class FSA_net_Capsule(BaseCapsuleFSANet):
     def __init__(self, image_size,num_classes,stage_num,lambda_d, S_set):
@@ -317,7 +345,6 @@ class FSA_net_Capsule(BaseCapsuleFSANet):
         
         model = Model(inputs=img_inputs, outputs=pred_pose)
         return model
-
 
 class FSA_net_Var_Capsule(BaseCapsuleFSANet):
     def __init__(self, image_size,num_classes,stage_num,lambda_d, S_set):
@@ -836,8 +863,7 @@ class FSA_net_noS_Capsule_FC(BaseCapsuleFSANet):
         model = Model(inputs=img_inputs, outputs=pred_pose)
         return model
 
-
-class FSA_net_NetVLAD(BaseFSANet):
+class FSA_net_NetVLAD(BaseNetVLADFSANet):
     def __init__(self, image_size,num_classes,stage_num,lambda_d, S_set):
         super(FSA_net_NetVLAD, self).__init__(image_size,num_classes,stage_num,lambda_d, S_set)
 
@@ -900,33 +926,8 @@ class FSA_net_NetVLAD(BaseFSANet):
             return ssr_S_model
         
         ssr_S_model = ssr_S_model_build(self.num_primcaps,self.m_dim)        
-        #-------------------------------------------------------------------------------------------------------------------------
-        def ssr_Agg_model_build(shape_primcaps):
-            input_primcaps = Input(shape_primcaps)
-
-            #capsule = CapsuleLayer(self.num_capsule, self.dim_capsule, self.routings, name='caps')(input_primcaps)
-            agg_feat = NetVLAD(feature_size=64, max_samples=self.num_primcaps, cluster_size=self.num_capsule, output_dim=self.num_capsule*self.dim_capsule)(input_primcaps)
-            agg_feat = Reshape((self.num_capsule,self.dim_capsule))(agg_feat)
-
-            s1_a = 0
-            s1_b = self.num_capsule//3
-            feat_s1_div = Lambda(lambda x: x[:,s1_a:s1_b,:])(agg_feat)
-            s2_a = self.num_capsule//3
-            s2_b = 2*self.num_capsule//3
-            feat_s2_div = Lambda(lambda x: x[:,s2_a:s2_b,:])(agg_feat)
-            s3_a = 2*self.num_capsule//3
-            s3_b = self.num_capsule
-            feat_s3_div = Lambda(lambda x: x[:,s3_a:s3_b,:])(agg_feat)
-
-
-            feat_s1_div = Reshape((-1,))(feat_s1_div)
-            feat_s2_div = Reshape((-1,))(feat_s2_div)
-            feat_s3_div = Reshape((-1,))(feat_s3_div)
-            
-            ssr_Agg_model = Model(inputs=input_primcaps,outputs=[feat_s1_div,feat_s2_div,feat_s3_div], name='ssr_Agg_model')            
-            return ssr_Agg_model
-
-        ssr_Agg_model = ssr_Agg_model_build((self.num_primcaps,64))
+        #-------------------------------------------------------------------------------------------------------------------------        
+        ssr_Agg_model = self.ssr_Agg_model_build((self.num_primcaps,64))
         #-------------------------------------------------------------------------------------------------------------------------
         def ssr_F_model_build(feat_dim, name_F):
             input_s1_pre = Input((feat_dim,))
@@ -980,7 +981,7 @@ class FSA_net_NetVLAD(BaseFSANet):
         model = Model(inputs=img_inputs, outputs=pred_pose)
         return model
 
-class FSA_net_Var_NetVLAD(BaseFSANet):
+class FSA_net_Var_NetVLAD(BaseNetVLADFSANet):
     def __init__(self, image_size,num_classes,stage_num,lambda_d, S_set):
         super(FSA_net_Var_NetVLAD, self).__init__(image_size,num_classes,stage_num,lambda_d, S_set)
             
@@ -1048,32 +1049,7 @@ class FSA_net_Var_NetVLAD(BaseFSANet):
         
         ssr_S_model = ssr_S_model_build(self.num_primcaps,self.m_dim)        
         #-------------------------------------------------------------------------------------------------------------------------
-        def ssr_Agg_model_build(shape_primcaps):
-            input_primcaps = Input(shape_primcaps)
-
-            #capsule = CapsuleLayer(self.num_capsule, self.dim_capsule, self.routings, name='caps')(input_primcaps)
-            agg_feat = NetVLAD(feature_size=64, max_samples=self.num_primcaps, cluster_size=self.num_capsule, output_dim=self.num_capsule*self.dim_capsule)(input_primcaps)
-            agg_feat = Reshape((self.num_capsule,self.dim_capsule))(agg_feat)
-
-            s1_a = 0
-            s1_b = self.num_capsule//3
-            feat_s1_div = Lambda(lambda x: x[:,s1_a:s1_b,:])(agg_feat)
-            s2_a = self.num_capsule//3
-            s2_b = 2*self.num_capsule//3
-            feat_s2_div = Lambda(lambda x: x[:,s2_a:s2_b,:])(agg_feat)
-            s3_a = 2*self.num_capsule//3
-            s3_b = self.num_capsule
-            feat_s3_div = Lambda(lambda x: x[:,s3_a:s3_b,:])(agg_feat)
-
-
-            feat_s1_div = Reshape((-1,))(feat_s1_div)
-            feat_s2_div = Reshape((-1,))(feat_s2_div)
-            feat_s3_div = Reshape((-1,))(feat_s3_div)
-            
-            ssr_Agg_model = Model(inputs=input_primcaps,outputs=[feat_s1_div,feat_s2_div,feat_s3_div], name='ssr_Agg_model')            
-            return ssr_Agg_model
-
-        ssr_Agg_model = ssr_Agg_model_build((self.num_primcaps,64))
+        ssr_Agg_model = self.ssr_Agg_model_build((self.num_primcaps,64))
         #-------------------------------------------------------------------------------------------------------------------------
         def ssr_F_model_build(feat_dim, name_F):
             input_s1_pre = Input((feat_dim,))
@@ -1126,7 +1102,7 @@ class FSA_net_Var_NetVLAD(BaseFSANet):
         model = Model(inputs=img_inputs, outputs=pred_pose)
         return model
 
-class FSA_net_noS_NetVLAD(BaseFSANet):
+class FSA_net_noS_NetVLAD(BaseNetVLADFSANet):
     def __init__(self, image_size,num_classes,stage_num,lambda_d, S_set):
         super(FSA_net_noS_NetVLAD, self).__init__(image_size,num_classes,stage_num,lambda_d, S_set)
 
@@ -1152,32 +1128,7 @@ class FSA_net_noS_NetVLAD(BaseFSANet):
         
         ssr_S_model = ssr_S_model_build()        
         #-------------------------------------------------------------------------------------------------------------------------
-        def ssr_Agg_model_build(shape_primcaps):
-            input_primcaps = Input(shape_primcaps)
-
-            #capsule = CapsuleLayer(self.num_capsule, self.dim_capsule, self.routings, name='caps')(input_primcaps)
-            agg_feat = NetVLAD(feature_size=64, max_samples=self.num_primcaps, cluster_size=self.num_capsule, output_dim=self.num_capsule*self.dim_capsule)(input_primcaps)
-            agg_feat = Reshape((self.num_capsule,self.dim_capsule))(agg_feat)
-
-            s1_a = 0
-            s1_b = self.num_capsule//3
-            feat_s1_div = Lambda(lambda x: x[:,s1_a:s1_b,:])(agg_feat)
-            s2_a = self.num_capsule//3
-            s2_b = 2*self.num_capsule//3
-            feat_s2_div = Lambda(lambda x: x[:,s2_a:s2_b,:])(agg_feat)
-            s3_a = 2*self.num_capsule//3
-            s3_b = self.num_capsule
-            feat_s3_div = Lambda(lambda x: x[:,s3_a:s3_b,:])(agg_feat)
-
-
-            feat_s1_div = Reshape((-1,))(feat_s1_div)
-            feat_s2_div = Reshape((-1,))(feat_s2_div)
-            feat_s3_div = Reshape((-1,))(feat_s3_div)
-            
-            ssr_Agg_model = Model(inputs=input_primcaps,outputs=[feat_s1_div,feat_s2_div,feat_s3_div], name='ssr_Agg_model')            
-            return ssr_Agg_model
-
-        ssr_Agg_model = ssr_Agg_model_build((self.num_primcaps,64))
+        ssr_Agg_model = self.ssr_Agg_model_build((self.num_primcaps,64))
         #-------------------------------------------------------------------------------------------------------------------------
         def ssr_F_model_build(feat_dim, name_F):
             input_s1_pre = Input((feat_dim,))
@@ -1230,7 +1181,7 @@ class FSA_net_noS_NetVLAD(BaseFSANet):
         model = Model(inputs=img_inputs, outputs=pred_pose)
         return model
 
-class FSA_net_NetVLAD_FC(BaseFSANet):
+class FSA_net_NetVLAD_FC(BaseNetVLADFSANet):
     def __init__(self, image_size,num_classes,stage_num,lambda_d, S_set):
         super(FSA_net_NetVLAD_FC, self).__init__(image_size,num_classes,stage_num,lambda_d, S_set)
 
@@ -1294,32 +1245,7 @@ class FSA_net_NetVLAD_FC(BaseFSANet):
         
         ssr_S_model = ssr_S_model_build(self.num_primcaps,self.m_dim)        
         #-------------------------------------------------------------------------------------------------------------------------
-        def ssr_Agg_model_build(shape_primcaps):
-            input_primcaps = Input(shape_primcaps)
-
-            #capsule = CapsuleLayer(self.num_capsule, self.dim_capsule, self.routings, name='caps')(input_primcaps)
-            agg_feat = NetVLAD(feature_size=64, max_samples=self.num_primcaps, cluster_size=self.num_capsule, output_dim=self.num_capsule*self.dim_capsule)(input_primcaps)
-            agg_feat = Reshape((self.num_capsule,self.dim_capsule))(agg_feat)
-
-            s1_a = 0
-            s1_b = self.num_capsule//3
-            feat_s1_div = Lambda(lambda x: x[:,s1_a:s1_b,:])(agg_feat)
-            s2_a = self.num_capsule//3
-            s2_b = 2*self.num_capsule//3
-            feat_s2_div = Lambda(lambda x: x[:,s2_a:s2_b,:])(agg_feat)
-            s3_a = 2*self.num_capsule//3
-            s3_b = self.num_capsule
-            feat_s3_div = Lambda(lambda x: x[:,s3_a:s3_b,:])(agg_feat)
-
-
-            feat_s1_div = Reshape((-1,))(feat_s1_div)
-            feat_s2_div = Reshape((-1,))(feat_s2_div)
-            feat_s3_div = Reshape((-1,))(feat_s3_div)
-            
-            ssr_Agg_model = Model(inputs=input_primcaps,outputs=[feat_s1_div,feat_s2_div,feat_s3_div], name='ssr_Agg_model')            
-            return ssr_Agg_model
-
-        ssr_Agg_model = ssr_Agg_model_build((self.num_primcaps,64))
+        ssr_Agg_model = self.ssr_Agg_model_build((self.num_primcaps,64))
         #-------------------------------------------------------------------------------------------------------------------------
         def ssr_F_model_build(feat_dim, name_F):
             input_s1_pre = Input((feat_dim,))
@@ -1369,7 +1295,7 @@ class FSA_net_NetVLAD_FC(BaseFSANet):
         model = Model(inputs=img_inputs, outputs=pred_pose)
         return model
 
-class FSA_net_Var_NetVLAD_FC(BaseFSANet):
+class FSA_net_Var_NetVLAD_FC(BaseNetVLADFSANet):
     def __init__(self, image_size,num_classes,stage_num,lambda_d, S_set):
         super(FSA_net_Var_NetVLAD_FC, self).__init__(image_size,num_classes,stage_num,lambda_d, S_set)
 
@@ -1438,32 +1364,7 @@ class FSA_net_Var_NetVLAD_FC(BaseFSANet):
         
         ssr_S_model = ssr_S_model_build(self.num_primcaps,self.m_dim)        
         #-------------------------------------------------------------------------------------------------------------------------
-        def ssr_Agg_model_build(shape_primcaps):
-            input_primcaps = Input(shape_primcaps)
-
-            #capsule = CapsuleLayer(self.num_capsule, self.dim_capsule, self.routings, name='caps')(input_primcaps)
-            agg_feat = NetVLAD(feature_size=64, max_samples=self.num_primcaps, cluster_size=self.num_capsule, output_dim=self.num_capsule*self.dim_capsule)(input_primcaps)
-            agg_feat = Reshape((self.num_capsule,self.dim_capsule))(agg_feat)
-
-            s1_a = 0
-            s1_b = self.num_capsule//3
-            feat_s1_div = Lambda(lambda x: x[:,s1_a:s1_b,:])(agg_feat)
-            s2_a = self.num_capsule//3
-            s2_b = 2*self.num_capsule//3
-            feat_s2_div = Lambda(lambda x: x[:,s2_a:s2_b,:])(agg_feat)
-            s3_a = 2*self.num_capsule//3
-            s3_b = self.num_capsule
-            feat_s3_div = Lambda(lambda x: x[:,s3_a:s3_b,:])(agg_feat)
-
-
-            feat_s1_div = Reshape((-1,))(feat_s1_div)
-            feat_s2_div = Reshape((-1,))(feat_s2_div)
-            feat_s3_div = Reshape((-1,))(feat_s3_div)
-            
-            ssr_Agg_model = Model(inputs=input_primcaps,outputs=[feat_s1_div,feat_s2_div,feat_s3_div], name='ssr_Agg_model')            
-            return ssr_Agg_model
-
-        ssr_Agg_model = ssr_Agg_model_build((self.num_primcaps,64))
+        ssr_Agg_model = self.ssr_Agg_model_build((self.num_primcaps,64))
         #-------------------------------------------------------------------------------------------------------------------------
         def ssr_F_model_build(feat_dim, name_F):
             input_s1_pre = Input((feat_dim,))
@@ -1513,10 +1414,9 @@ class FSA_net_Var_NetVLAD_FC(BaseFSANet):
         model = Model(inputs=img_inputs, outputs=pred_pose)
         return model
 
-class FSA_net_noS_NetVLAD_FC(BaseFSANet):
+class FSA_net_noS_NetVLAD_FC(BaseNetVLADFSANet):
     def __init__(self, image_size,num_classes,stage_num,lambda_d, S_set):
         super(FSA_net_noS_NetVLAD_FC, self).__init__(image_size,num_classes,stage_num,lambda_d, S_set)
-
             
     def __call__(self):
         logging.debug("Creating model...")
@@ -1539,32 +1439,7 @@ class FSA_net_noS_NetVLAD_FC(BaseFSANet):
         
         ssr_S_model = ssr_S_model_build()        
         #-------------------------------------------------------------------------------------------------------------------------
-        def ssr_Agg_model_build(shape_primcaps):
-            input_primcaps = Input(shape_primcaps)
-
-            #capsule = CapsuleLayer(self.num_capsule, self.dim_capsule, self.routings, name='caps')(input_primcaps)
-            agg_feat = NetVLAD(feature_size=64, max_samples=self.num_primcaps, cluster_size=self.num_capsule, output_dim=self.num_capsule*self.dim_capsule)(input_primcaps)
-            agg_feat = Reshape((self.num_capsule,self.dim_capsule))(agg_feat)
-
-            s1_a = 0
-            s1_b = self.num_capsule//3
-            feat_s1_div = Lambda(lambda x: x[:,s1_a:s1_b,:])(agg_feat)
-            s2_a = self.num_capsule//3
-            s2_b = 2*self.num_capsule//3
-            feat_s2_div = Lambda(lambda x: x[:,s2_a:s2_b,:])(agg_feat)
-            s3_a = 2*self.num_capsule//3
-            s3_b = self.num_capsule
-            feat_s3_div = Lambda(lambda x: x[:,s3_a:s3_b,:])(agg_feat)
-
-
-            feat_s1_div = Reshape((-1,))(feat_s1_div)
-            feat_s2_div = Reshape((-1,))(feat_s2_div)
-            feat_s3_div = Reshape((-1,))(feat_s3_div)
-            
-            ssr_Agg_model = Model(inputs=input_primcaps,outputs=[feat_s1_div,feat_s2_div,feat_s3_div], name='ssr_Agg_model')            
-            return ssr_Agg_model
-
-        ssr_Agg_model = ssr_Agg_model_build((self.num_primcaps,64))
+        ssr_Agg_model = self.ssr_Agg_model_build((self.num_primcaps,64))
         #-------------------------------------------------------------------------------------------------------------------------
         def ssr_F_model_build(feat_dim, name_F):
             input_s1_pre = Input((feat_dim,))
@@ -1619,7 +1494,6 @@ class FSA_net_noS_NetVLAD_FC(BaseFSANet):
 class FSA_net_Metric(BaseFSANet):
     def __init__(self, image_size,num_classes,stage_num,lambda_d, S_set):
         super(FSA_net_Metric, self).__init__(image_size,num_classes,stage_num,lambda_d, S_set)
-
         
     def __call__(self):
         logging.debug("Creating model...")
