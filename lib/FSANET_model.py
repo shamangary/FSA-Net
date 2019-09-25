@@ -27,9 +27,8 @@ from .capsulelayers import *
 sys.setrecursionlimit(2 ** 20)
 np.random.seed(2 ** 10)
 
-class FSA_net_Capsule:
+class BaseFSANet(object):
     def __init__(self, image_size,num_classes,stage_num,lambda_d, S_set):
-        
         if K.image_dim_ordering() == "th":
             logging.debug("image_dim_ordering = 'th'")
             self._channel_axis = 1
@@ -52,6 +51,10 @@ class FSA_net_Capsule:
 
         self.F_shape = int(self.num_capsule/3)*self.dim_capsule
 
+
+class FSA_net_Capsule(BaseFSANet):
+    def __init__(self, image_size,num_classes,stage_num,lambda_d, S_set):
+        super(FSA_net_Capsule, self).__init__(image_size,num_classes,stage_num,lambda_d, S_set)       
         
     def __call__(self):
         logging.debug("Creating model...")
@@ -315,31 +318,9 @@ class FSA_net_Capsule:
 
 
         return model
-class FSA_net_Var_Capsule:
+class FSA_net_Var_Capsule(BaseFSANet):
     def __init__(self, image_size,num_classes,stage_num,lambda_d, S_set):
-        
-        if K.image_dim_ordering() == "th":
-            logging.debug("image_dim_ordering = 'th'")
-            self._channel_axis = 1
-            self._input_shape = (3, image_size, image_size)
-        else:
-            logging.debug("image_dim_ordering = 'tf'")
-            self._channel_axis = -1
-            self._input_shape = (image_size, image_size, 3)
-
-        self.num_classes = num_classes
-        self.stage_num = stage_num
-        self.lambda_d = lambda_d
-
-        self.num_capsule = S_set[0]
-        self.dim_capsule = S_set[1]
-        self.routings = S_set[2]
-
-        self.num_primcaps = S_set[3]
-        self.m_dim = S_set[4]
-
-        self.F_shape = int(self.num_capsule/3)*self.dim_capsule
-
+        super(FSA_net_Var_Capsule, self).__init__(image_size,num_classes,stage_num,lambda_d, S_set)   
         
     def __call__(self):
         logging.debug("Creating model...")
@@ -607,30 +588,10 @@ class FSA_net_Var_Capsule:
 
 
         return model
-class FSA_net_noS_Capsule:
+
+class FSA_net_noS_Capsule(BaseFSANet):
     def __init__(self, image_size,num_classes,stage_num,lambda_d, S_set):
-        
-        if K.image_dim_ordering() == "th":
-            logging.debug("image_dim_ordering = 'th'")
-            self._channel_axis = 1
-            self._input_shape = (3, image_size, image_size)
-        else:
-            logging.debug("image_dim_ordering = 'tf'")
-            self._channel_axis = -1
-            self._input_shape = (image_size, image_size, 3)
-
-        self.num_classes = num_classes
-        self.stage_num = stage_num
-        self.lambda_d = lambda_d
-
-        self.num_capsule = S_set[0]
-        self.dim_capsule = S_set[1]
-        self.routings = S_set[2]
-
-        self.num_primcaps = S_set[3]
-        self.m_dim = S_set[4]
-
-        self.F_shape = int(self.num_capsule/3)*self.dim_capsule
+        super(FSA_net_noS_Capsule, self).__init__(image_size,num_classes,stage_num,lambda_d, S_set)   
 
         
     def __call__(self):
@@ -858,31 +819,9 @@ class FSA_net_noS_Capsule:
 
 
 
-class FSA_net_Capsule_FC:
+class FSA_net_Capsule_FC(BaseFSANet):
     def __init__(self, image_size,num_classes,stage_num,lambda_d, S_set):
-        
-        if K.image_dim_ordering() == "th":
-            logging.debug("image_dim_ordering = 'th'")
-            self._channel_axis = 1
-            self._input_shape = (3, image_size, image_size)
-        else:
-            logging.debug("image_dim_ordering = 'tf'")
-            self._channel_axis = -1
-            self._input_shape = (image_size, image_size, 3)
-
-        self.num_classes = num_classes
-        self.stage_num = stage_num
-        self.lambda_d = lambda_d
-
-        self.num_capsule = S_set[0]
-        self.dim_capsule = S_set[1]
-        self.routings = S_set[2]
-
-        self.num_primcaps = S_set[3]
-        self.m_dim = S_set[4]
-
-        self.F_shape = int(self.num_capsule/3)*self.dim_capsule
-
+        super(FSA_net_Capsule_FC, self).__init__(image_size,num_classes,stage_num,lambda_d, S_set)  
         
     def __call__(self):
         logging.debug("Creating model...")
@@ -1143,30 +1082,9 @@ class FSA_net_Capsule_FC:
 
 
         return model
-class FSA_net_Var_Capsule_FC:
+class FSA_net_Var_Capsule_FC(BaseFSANet):
     def __init__(self, image_size,num_classes,stage_num,lambda_d, S_set):
-        
-        if K.image_dim_ordering() == "th":
-            logging.debug("image_dim_ordering = 'th'")
-            self._channel_axis = 1
-            self._input_shape = (3, image_size, image_size)
-        else:
-            logging.debug("image_dim_ordering = 'tf'")
-            self._channel_axis = -1
-            self._input_shape = (image_size, image_size, 3)
-
-        self.num_classes = num_classes
-        self.stage_num = stage_num
-        self.lambda_d = lambda_d
-
-        self.num_capsule = S_set[0]
-        self.dim_capsule = S_set[1]
-        self.routings = S_set[2]
-
-        self.num_primcaps = S_set[3]
-        self.m_dim = S_set[4]
-
-        self.F_shape = int(self.num_capsule/3)*self.dim_capsule
+        super(FSA_net_Var_Capsule_FC, self).__init__(image_size,num_classes,stage_num,lambda_d, S_set)
 
         
     def __call__(self):
@@ -1432,30 +1350,10 @@ class FSA_net_Var_Capsule_FC:
 
 
         return model
-class FSA_net_noS_Capsule_FC:
+
+class FSA_net_noS_Capsule_FC(BaseFSANet):
     def __init__(self, image_size,num_classes,stage_num,lambda_d, S_set):
-        
-        if K.image_dim_ordering() == "th":
-            logging.debug("image_dim_ordering = 'th'")
-            self._channel_axis = 1
-            self._input_shape = (3, image_size, image_size)
-        else:
-            logging.debug("image_dim_ordering = 'tf'")
-            self._channel_axis = -1
-            self._input_shape = (image_size, image_size, 3)
-
-        self.num_classes = num_classes
-        self.stage_num = stage_num
-        self.lambda_d = lambda_d
-
-        self.num_capsule = S_set[0]
-        self.dim_capsule = S_set[1]
-        self.routings = S_set[2]
-
-        self.num_primcaps = S_set[3]
-        self.m_dim = S_set[4]
-
-        self.F_shape = int(self.num_capsule/3)*self.dim_capsule
+        super(FSA_net_noS_Capsule_FC, self).__init__(image_size,num_classes,stage_num,lambda_d, S_set)
 
         
     def __call__(self):
@@ -1679,30 +1577,9 @@ class FSA_net_noS_Capsule_FC:
         return model
 
 
-class FSA_net_NetVLAD:
+class FSA_net_NetVLAD(BaseFSANet):
     def __init__(self, image_size,num_classes,stage_num,lambda_d, S_set):
-        
-        if K.image_dim_ordering() == "th":
-            logging.debug("image_dim_ordering = 'th'")
-            self._channel_axis = 1
-            self._input_shape = (3, image_size, image_size)
-        else:
-            logging.debug("image_dim_ordering = 'tf'")
-            self._channel_axis = -1
-            self._input_shape = (image_size, image_size, 3)
-
-        self.num_classes = num_classes
-        self.stage_num = stage_num
-        self.lambda_d = lambda_d
-
-        self.num_capsule = S_set[0]
-        self.dim_capsule = S_set[1]
-        self.routings = S_set[2]
-
-        self.num_primcaps = S_set[3]
-        self.m_dim = S_set[4]
-
-        self.F_shape = int(self.num_capsule/3)*self.dim_capsule
+        super(FSA_net_NetVLAD, self).__init__(image_size,num_classes,stage_num,lambda_d, S_set)
 
     def __call__(self):
         logging.debug("Creating model...")
@@ -1965,31 +1842,10 @@ class FSA_net_NetVLAD:
 
 
         return model
-class FSA_net_Var_NetVLAD:
+
+class FSA_net_Var_NetVLAD(BaseFSANet):
     def __init__(self, image_size,num_classes,stage_num,lambda_d, S_set):
-        
-        if K.image_dim_ordering() == "th":
-            logging.debug("image_dim_ordering = 'th'")
-            self._channel_axis = 1
-            self._input_shape = (3, image_size, image_size)
-        else:
-            logging.debug("image_dim_ordering = 'tf'")
-            self._channel_axis = -1
-            self._input_shape = (image_size, image_size, 3)
-
-        self.num_classes = num_classes
-        self.stage_num = stage_num
-        self.lambda_d = lambda_d
-
-        self.num_capsule = S_set[0]
-        self.dim_capsule = S_set[1]
-        self.routings = S_set[2]
-
-        self.num_primcaps = S_set[3]
-        self.m_dim = S_set[4]
-
-        self.F_shape = int(self.num_capsule/3)*self.dim_capsule
-
+        super(FSA_net_Var_NetVLAD, self).__init__(image_size,num_classes,stage_num,lambda_d, S_set)
             
     def __call__(self):
         logging.debug("Creating model...")
@@ -2256,30 +2112,10 @@ class FSA_net_Var_NetVLAD:
 
 
         return model
-class FSA_net_noS_NetVLAD:
+
+class FSA_net_noS_NetVLAD(BaseFSANet):
     def __init__(self, image_size,num_classes,stage_num,lambda_d, S_set):
-        
-        if K.image_dim_ordering() == "th":
-            logging.debug("image_dim_ordering = 'th'")
-            self._channel_axis = 1
-            self._input_shape = (3, image_size, image_size)
-        else:
-            logging.debug("image_dim_ordering = 'tf'")
-            self._channel_axis = -1
-            self._input_shape = (image_size, image_size, 3)
-
-        self.num_classes = num_classes
-        self.stage_num = stage_num
-        self.lambda_d = lambda_d
-
-        self.num_capsule = S_set[0]
-        self.dim_capsule = S_set[1]
-        self.routings = S_set[2]
-
-        self.num_primcaps = S_set[3]
-        self.m_dim = S_set[4]
-
-        self.F_shape = int(self.num_capsule/3)*self.dim_capsule
+        super(FSA_net_noS_NetVLAD, self).__init__(image_size,num_classes,stage_num,lambda_d, S_set)
 
             
     def __call__(self):
@@ -2506,30 +2342,9 @@ class FSA_net_noS_NetVLAD:
         return model
 
 
-class FSA_net_NetVLAD_FC:
+class FSA_net_NetVLAD_FC(BaseFSANet):
     def __init__(self, image_size,num_classes,stage_num,lambda_d, S_set):
-        
-        if K.image_dim_ordering() == "th":
-            logging.debug("image_dim_ordering = 'th'")
-            self._channel_axis = 1
-            self._input_shape = (3, image_size, image_size)
-        else:
-            logging.debug("image_dim_ordering = 'tf'")
-            self._channel_axis = -1
-            self._input_shape = (image_size, image_size, 3)
-
-        self.num_classes = num_classes
-        self.stage_num = stage_num
-        self.lambda_d = lambda_d
-
-        self.num_capsule = S_set[0]
-        self.dim_capsule = S_set[1]
-        self.routings = S_set[2]
-
-        self.num_primcaps = S_set[3]
-        self.m_dim = S_set[4]
-
-        self.F_shape = int(self.num_capsule/3)*self.dim_capsule
+        super(FSA_net_NetVLAD_FC, self).__init__(image_size,num_classes,stage_num,lambda_d, S_set)
 
     def __call__(self):
         logging.debug("Creating model...")
@@ -2789,30 +2604,10 @@ class FSA_net_NetVLAD_FC:
 
 
         return model
-class FSA_net_Var_NetVLAD_FC:
+
+class FSA_net_Var_NetVLAD_FC(BaseFSANet):
     def __init__(self, image_size,num_classes,stage_num,lambda_d, S_set):
-        
-        if K.image_dim_ordering() == "th":
-            logging.debug("image_dim_ordering = 'th'")
-            self._channel_axis = 1
-            self._input_shape = (3, image_size, image_size)
-        else:
-            logging.debug("image_dim_ordering = 'tf'")
-            self._channel_axis = -1
-            self._input_shape = (image_size, image_size, 3)
-
-        self.num_classes = num_classes
-        self.stage_num = stage_num
-        self.lambda_d = lambda_d
-
-        self.num_capsule = S_set[0]
-        self.dim_capsule = S_set[1]
-        self.routings = S_set[2]
-
-        self.num_primcaps = S_set[3]
-        self.m_dim = S_set[4]
-
-        self.F_shape = int(self.num_capsule/3)*self.dim_capsule
+        super(FSA_net_Var_NetVLAD_FC, self).__init__(image_size,num_classes,stage_num,lambda_d, S_set)
 
             
     def __call__(self):
@@ -3077,30 +2872,10 @@ class FSA_net_Var_NetVLAD_FC:
 
 
         return model
-class FSA_net_noS_NetVLAD_FC:
+
+class FSA_net_noS_NetVLAD_FC(BaseFSANet):
     def __init__(self, image_size,num_classes,stage_num,lambda_d, S_set):
-        
-        if K.image_dim_ordering() == "th":
-            logging.debug("image_dim_ordering = 'th'")
-            self._channel_axis = 1
-            self._input_shape = (3, image_size, image_size)
-        else:
-            logging.debug("image_dim_ordering = 'tf'")
-            self._channel_axis = -1
-            self._input_shape = (image_size, image_size, 3)
-
-        self.num_classes = num_classes
-        self.stage_num = stage_num
-        self.lambda_d = lambda_d
-
-        self.num_capsule = S_set[0]
-        self.dim_capsule = S_set[1]
-        self.routings = S_set[2]
-
-        self.num_primcaps = S_set[3]
-        self.m_dim = S_set[4]
-
-        self.F_shape = int(self.num_capsule/3)*self.dim_capsule
+        super(FSA_net_noS_NetVLAD_FC, self).__init__(image_size,num_classes,stage_num,lambda_d, S_set)
 
             
     def __call__(self):
@@ -3324,30 +3099,9 @@ class FSA_net_noS_NetVLAD_FC:
         return model
 
 
-class FSA_net_Metric:
+class FSA_net_Metric(BaseFSANet):
     def __init__(self, image_size,num_classes,stage_num,lambda_d, S_set):
-        
-        if K.image_dim_ordering() == "th":
-            logging.debug("image_dim_ordering = 'th'")
-            self._channel_axis = 1
-            self._input_shape = (3, image_size, image_size)
-        else:
-            logging.debug("image_dim_ordering = 'tf'")
-            self._channel_axis = -1
-            self._input_shape = (image_size, image_size, 3)
-
-        self.num_classes = num_classes
-        self.stage_num = stage_num
-        self.lambda_d = lambda_d
-
-        self.num_capsule = S_set[0]
-        self.dim_capsule = S_set[1]
-        self.routings = S_set[2]
-
-        self.num_primcaps = S_set[3]
-        self.m_dim = S_set[4]
-
-        self.F_shape = int(self.num_capsule/3)*self.dim_capsule
+        super(FSA_net_Metric, self).__init__(image_size,num_classes,stage_num,lambda_d, S_set)
 
         
     def __call__(self):
@@ -3612,30 +3366,10 @@ class FSA_net_Metric:
 
 
         return model
-class FSA_net_Var_Metric:
+
+class FSA_net_Var_Metric(BaseFSANet):
     def __init__(self, image_size,num_classes,stage_num,lambda_d, S_set):
-        
-        if K.image_dim_ordering() == "th":
-            logging.debug("image_dim_ordering = 'th'")
-            self._channel_axis = 1
-            self._input_shape = (3, image_size, image_size)
-        else:
-            logging.debug("image_dim_ordering = 'tf'")
-            self._channel_axis = -1
-            self._input_shape = (image_size, image_size, 3)
-
-        self.num_classes = num_classes
-        self.stage_num = stage_num
-        self.lambda_d = lambda_d
-
-        self.num_capsule = S_set[0]
-        self.dim_capsule = S_set[1]
-        self.routings = S_set[2]
-
-        self.num_primcaps = S_set[3]
-        self.m_dim = S_set[4]
-
-        self.F_shape = int(self.num_capsule/3)*self.dim_capsule
+        super(FSA_net_Var_Metric, self).__init__(image_size,num_classes,stage_num,lambda_d, S_set)
 
         
     def __call__(self):
@@ -3905,30 +3639,10 @@ class FSA_net_Var_Metric:
 
 
         return model
-class FSA_net_noS_Metric:
-    def __init__(self, image_size,num_classes,stage_num,lambda_d, S_set):
         
-        if K.image_dim_ordering() == "th":
-            logging.debug("image_dim_ordering = 'th'")
-            self._channel_axis = 1
-            self._input_shape = (3, image_size, image_size)
-        else:
-            logging.debug("image_dim_ordering = 'tf'")
-            self._channel_axis = -1
-            self._input_shape = (image_size, image_size, 3)
-
-        self.num_classes = num_classes
-        self.stage_num = stage_num
-        self.lambda_d = lambda_d
-
-        self.num_capsule = S_set[0]
-        self.dim_capsule = S_set[1]
-        self.routings = S_set[2]
-
-        self.num_primcaps = S_set[3]
-        self.m_dim = S_set[4]
-
-        self.F_shape = int(self.num_capsule/3)*self.dim_capsule
+class FSA_net_noS_Metric(BaseFSANet):
+    def __init__(self, image_size,num_classes,stage_num,lambda_d, S_set):
+        super(FSA_net_noS_Metric, self).__init__(image_size,num_classes,stage_num,lambda_d, S_set)
 
         
     def __call__(self):
@@ -4148,13 +3862,10 @@ class FSA_net_noS_Metric:
         ssr_primcaps = ssr_S_model(ssr_G_list)
         ssr_Metric_list = ssr_Metric_model(ssr_primcaps)
         ssr_F_list = ssr_F_model(ssr_Metric_list)
-        pred_pose = Lambda(SSR_module,arguments={'s1':self.stage_num[0],'s2':self.stage_num[1],'s3':self.stage_num[2],'lambda_d':self.lambda_d},name='pred_pose')(ssr_F_list)
-        
+        pred_pose = Lambda(SSR_module,arguments={'s1':self.stage_num[0],'s2':self.stage_num[1],'s3':self.stage_num[2],'lambda_d':self.lambda_d},name='pred_pose')(ssr_F_list)       
 
 
         model = Model(inputs=img_inputs, outputs=pred_pose)
-
-
         return model
 
 
