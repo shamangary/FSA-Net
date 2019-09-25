@@ -22,6 +22,7 @@ from keras import activations, initializers, regularizers, constraints
 
 from .utils import get_initial_weights
 from .capsulelayers import *
+from .loupe_keras import *
 
 sys.setrecursionlimit(2 ** 20)
 np.random.seed(2 ** 10)
@@ -1025,7 +1026,7 @@ class FSA_net_NetVLAD(BaseFSANet):
             input_primcaps = Input(shape_primcaps)
 
             #capsule = CapsuleLayer(self.num_capsule, self.dim_capsule, self.routings, name='caps')(input_primcaps)
-            agg_feat = lpk.NetVLAD(feature_size=64, max_samples=self.num_primcaps, cluster_size=self.num_capsule, output_dim=self.num_capsule*self.dim_capsule)(input_primcaps)
+            agg_feat = NetVLAD(feature_size=64, max_samples=self.num_primcaps, cluster_size=self.num_capsule, output_dim=self.num_capsule*self.dim_capsule)(input_primcaps)
             agg_feat = Reshape((self.num_capsule,self.dim_capsule))(agg_feat)
 
             s1_a = 0
@@ -1172,7 +1173,7 @@ class FSA_net_Var_NetVLAD(BaseFSANet):
             input_primcaps = Input(shape_primcaps)
 
             #capsule = CapsuleLayer(self.num_capsule, self.dim_capsule, self.routings, name='caps')(input_primcaps)
-            agg_feat = lpk.NetVLAD(feature_size=64, max_samples=self.num_primcaps, cluster_size=self.num_capsule, output_dim=self.num_capsule*self.dim_capsule)(input_primcaps)
+            agg_feat = NetVLAD(feature_size=64, max_samples=self.num_primcaps, cluster_size=self.num_capsule, output_dim=self.num_capsule*self.dim_capsule)(input_primcaps)
             agg_feat = Reshape((self.num_capsule,self.dim_capsule))(agg_feat)
 
             s1_a = 0
@@ -1276,7 +1277,7 @@ class FSA_net_noS_NetVLAD(BaseFSANet):
             input_primcaps = Input(shape_primcaps)
 
             #capsule = CapsuleLayer(self.num_capsule, self.dim_capsule, self.routings, name='caps')(input_primcaps)
-            agg_feat = lpk.NetVLAD(feature_size=64, max_samples=self.num_primcaps, cluster_size=self.num_capsule, output_dim=self.num_capsule*self.dim_capsule)(input_primcaps)
+            agg_feat = NetVLAD(feature_size=64, max_samples=self.num_primcaps, cluster_size=self.num_capsule, output_dim=self.num_capsule*self.dim_capsule)(input_primcaps)
             agg_feat = Reshape((self.num_capsule,self.dim_capsule))(agg_feat)
 
             s1_a = 0
@@ -1418,7 +1419,7 @@ class FSA_net_NetVLAD_FC(BaseFSANet):
             input_primcaps = Input(shape_primcaps)
 
             #capsule = CapsuleLayer(self.num_capsule, self.dim_capsule, self.routings, name='caps')(input_primcaps)
-            agg_feat = lpk.NetVLAD(feature_size=64, max_samples=self.num_primcaps, cluster_size=self.num_capsule, output_dim=self.num_capsule*self.dim_capsule)(input_primcaps)
+            agg_feat = NetVLAD(feature_size=64, max_samples=self.num_primcaps, cluster_size=self.num_capsule, output_dim=self.num_capsule*self.dim_capsule)(input_primcaps)
             agg_feat = Reshape((self.num_capsule,self.dim_capsule))(agg_feat)
 
             s1_a = 0
@@ -1562,7 +1563,7 @@ class FSA_net_Var_NetVLAD_FC(BaseFSANet):
             input_primcaps = Input(shape_primcaps)
 
             #capsule = CapsuleLayer(self.num_capsule, self.dim_capsule, self.routings, name='caps')(input_primcaps)
-            agg_feat = lpk.NetVLAD(feature_size=64, max_samples=self.num_primcaps, cluster_size=self.num_capsule, output_dim=self.num_capsule*self.dim_capsule)(input_primcaps)
+            agg_feat = NetVLAD(feature_size=64, max_samples=self.num_primcaps, cluster_size=self.num_capsule, output_dim=self.num_capsule*self.dim_capsule)(input_primcaps)
             agg_feat = Reshape((self.num_capsule,self.dim_capsule))(agg_feat)
 
             s1_a = 0
@@ -1663,7 +1664,7 @@ class FSA_net_noS_NetVLAD_FC(BaseFSANet):
             input_primcaps = Input(shape_primcaps)
 
             #capsule = CapsuleLayer(self.num_capsule, self.dim_capsule, self.routings, name='caps')(input_primcaps)
-            agg_feat = lpk.NetVLAD(feature_size=64, max_samples=self.num_primcaps, cluster_size=self.num_capsule, output_dim=self.num_capsule*self.dim_capsule)(input_primcaps)
+            agg_feat = NetVLAD(feature_size=64, max_samples=self.num_primcaps, cluster_size=self.num_capsule, output_dim=self.num_capsule*self.dim_capsule)(input_primcaps)
             agg_feat = Reshape((self.num_capsule,self.dim_capsule))(agg_feat)
 
             s1_a = 0
