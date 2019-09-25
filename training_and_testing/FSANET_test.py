@@ -16,6 +16,7 @@ from keras.preprocessing.image import ImageDataGenerator
 from keras.callbacks import LearningRateScheduler, ModelCheckpoint
 
 from lib.FSANET_model import *
+from lib.SSRNET_model import *
 
 import TYY_callbacks
 from TYY_generators import *

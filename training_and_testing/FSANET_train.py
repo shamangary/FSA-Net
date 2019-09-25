@@ -7,6 +7,7 @@ import pandas as pd
 import numpy as np
 
 from lib.FSANET_model import *
+from lib.SSRNET_model import *
 
 import TYY_callbacks
 from TYY_generators import *
