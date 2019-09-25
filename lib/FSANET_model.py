@@ -14,14 +14,15 @@ from keras.utils import plot_model
 from keras.engine.topology import Layer
 from keras import activations, initializers, regularizers, constraints
 import tensorflow as tf
-from capsulelayers import *
+
 
 from keras.layers.advanced_activations import PReLU
-from utils import get_initial_weights
+
 from keras.layers.recurrent import *
 from keras.layers.wrappers import *
-import loupe_keras as lpk
 
+from .utils import get_initial_weights
+from .capsulelayers import *
 
 sys.setrecursionlimit(2 ** 20)
 np.random.seed(2 ** 10)

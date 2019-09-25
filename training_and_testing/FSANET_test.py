@@ -1,5 +1,6 @@
 import os
 import sys
+sys.path.append('..')
 import logging
 import argparse
 
@@ -14,7 +15,7 @@ from keras.optimizers import SGD, Adam
 from keras.preprocessing.image import ImageDataGenerator
 from keras.callbacks import LearningRateScheduler, ModelCheckpoint
 
-from FSANET_model import *
+from lib.FSANET_model import *
 
 import TYY_callbacks
 from TYY_generators import *
@@ -448,5 +449,5 @@ def main():
         print(save_name+', '+test_db_name+'('+train_db_name+')'+', MAE = %3.3f, [yaw,pitch,roll] = [%3.3f, %3.3f, %3.3f]'%(MAE, yaw, pitch, roll))
         print('--------------------------------------------------------------------------------')
 
-if __name__ == '__main__':
+if __name__ == '__main__':    
     main()
