@@ -55,13 +55,13 @@ class BaseFSANet(object):
 
         self.is_fc_model = False
         self.is_noS_model = False
+        self.is_varS_model = False
 
     def _convBlock(self, x, num_filters, activation, kernel_size=(3,3)):
         x = SeparableConv2D(num_filters,kernel_size,padding='same')(x)
         x = BatchNormalization(axis=-1)(x)
         x = Activation(activation)(x)
         return x
-
 
     def ssr_G_model_build(self, img_inputs):
         #-------------------------------------------------------------------------------------------------------------------------        
@@ -188,6 +188,23 @@ class BaseFSANet(object):
            
         return Model(inputs=[input_s1_pre,input_s2_pre,input_s3_pre],outputs=[pred_s1,pred_s2,pred_s3,delta_s1,delta_s2,delta_s3,local_s1,local_s2,local_s3], name=name_F)
 
+    def ssr_feat_S_model_build(self, m_dim):
+        input_preS = Input((8,8,64))
+        def var(x):
+            mean, var = tf.nn.moments(x,axes=-1)
+            return var
+
+        if self.is_varS_model:
+            feat_preS = Lambda(var)(input_preS)
+        else:
+            feat_preS = Conv2D(1,(1,1),padding='same',activation='sigmoid')(input_preS)        
+
+        feat_preS = Reshape((-1,))(feat_preS)
+        SR_matrix = Dense(m_dim*(8*8+8*8+8*8),activation='sigmoid')(feat_preS)
+        SR_matrix = Reshape((m_dim,(8*8+8*8+8*8)))(SR_matrix)
+        
+        return Model(inputs=input_preS,outputs=[SR_matrix,feat_preS],name='feat_S_model')
+
     def ssr_S_model_build(self, num_primcaps, m_dim):
         input_s1_preS = Input((8,8,64))
         input_s2_preS = Input((8,8,64))
@@ -299,31 +316,12 @@ class BaseCapsuleFSANet(BaseFSANet):
 class FSA_net_Capsule(BaseCapsuleFSANet):
     def __init__(self, image_size,num_classes,stage_num,lambda_d, S_set):
         super(FSA_net_Capsule, self).__init__(image_size,num_classes,stage_num,lambda_d, S_set)       
-
-    def ssr_feat_S_model_build(self, num_primcaps, m_dim):
-        input_preS = Input((8,8,64))
-        feat_preS = Conv2D(1,(1,1),padding='same',activation='sigmoid')(input_preS)
-        feat_preS = Reshape((-1,))(feat_preS)
-        SR_matrix = Dense(m_dim*(8*8+8*8+8*8),activation='sigmoid')(feat_preS)
-        SR_matrix = Reshape((m_dim,(8*8+8*8+8*8)))(SR_matrix)
-        
-        return Model(inputs=input_preS,outputs=[SR_matrix,feat_preS],name='feat_S_model')    
+        self.is_varS_model = False    
  
 class FSA_net_Var_Capsule(BaseCapsuleFSANet):
     def __init__(self, image_size,num_classes,stage_num,lambda_d, S_set):
         super(FSA_net_Var_Capsule, self).__init__(image_size,num_classes,stage_num,lambda_d, S_set)   
-
-    def ssr_feat_S_model_build(self, m_dim):
-        input_preS = Input((8,8,64))
-        def var(x):
-            mean, var = tf.nn.moments(x,axes=-1)
-            return var
-        feat_preS = Lambda(var)(input_preS)
-        feat_preS = Reshape((-1,))(feat_preS)
-        SR_matrix = Dense(m_dim*(8*8+8*8+8*8),activation='sigmoid')(feat_preS)
-        SR_matrix = Reshape((m_dim,(8*8+8*8+8*8)))(SR_matrix)
-        
-        return Model(inputs=input_preS,outputs=[SR_matrix,feat_preS],name='feat_S_model')
+        self.is_varS_model = True    
         
 class FSA_net_noS_Capsule(BaseCapsuleFSANet):
     def __init__(self, image_size,num_classes,stage_num,lambda_d, S_set):
@@ -376,34 +374,12 @@ class BaseNetVLADFSANet(BaseFSANet):
 class FSA_net_NetVLAD(BaseNetVLADFSANet):
     def __init__(self, image_size,num_classes,stage_num,lambda_d, S_set):
         super(FSA_net_NetVLAD, self).__init__(image_size,num_classes,stage_num,lambda_d, S_set)
-
-    def ssr_feat_S_model_build(self, m_dim):
-        input_preS = Input((8,8,64))
-
-        feat_preS = Conv2D(1,(1,1),padding='same',activation='sigmoid')(input_preS)
-        feat_preS = Reshape((-1,))(feat_preS)
-        SR_matrix = Dense(m_dim*(8*8+8*8+8*8),activation='sigmoid')(feat_preS)
-        SR_matrix = Reshape((m_dim,(8*8+8*8+8*8)))(SR_matrix)
-        
-        return Model(inputs=input_preS,outputs=[SR_matrix,feat_preS],name='feat_S_model')    
+        self.is_varS_model = False    
     
 class FSA_net_Var_NetVLAD(BaseNetVLADFSANet):
     def __init__(self, image_size,num_classes,stage_num,lambda_d, S_set):
         super(FSA_net_Var_NetVLAD, self).__init__(image_size,num_classes,stage_num,lambda_d, S_set)
-
-    def ssr_feat_S_model_build(self, m_dim):
-        input_preS = Input((8,8,64))
-
-        #feat_preS = Conv2D(1,(1,1),padding='same',activation='sigmoid')(input_preS)
-        def var(x):
-            mean, var = tf.nn.moments(x,axes=-1)
-            return var
-        feat_preS = Lambda(var)(input_preS)
-        feat_preS = Reshape((-1,))(feat_preS)
-        SR_matrix = Dense(m_dim*(8*8+8*8+8*8),activation='sigmoid')(feat_preS)
-        SR_matrix = Reshape((m_dim,(8*8+8*8+8*8)))(SR_matrix)
-        
-        return Model(inputs=input_preS,outputs=[SR_matrix,feat_preS],name='feat_S_model')   
+        self.is_varS_model = True    
 
 class FSA_net_noS_NetVLAD(BaseNetVLADFSANet):
     def __init__(self, image_size,num_classes,stage_num,lambda_d, S_set):
@@ -456,32 +432,12 @@ class BaseMetricFSANet(BaseFSANet):
 class FSA_net_Metric(BaseMetricFSANet):
     def __init__(self, image_size,num_classes,stage_num,lambda_d, S_set):
         super(FSA_net_Metric, self).__init__(image_size,num_classes,stage_num,lambda_d, S_set)
-
-    def ssr_feat_S_model_build(self, m_dim):
-        input_preS = Input((8,8,64))
-
-        feat_preS = Conv2D(1,(1,1),padding='same',activation='sigmoid')(input_preS)
-        feat_preS = Reshape((-1,))(feat_preS)
-        SR_matrix = Dense(m_dim*(8*8+8*8+8*8),activation='sigmoid')(feat_preS)
-        SR_matrix = Reshape((m_dim,(8*8+8*8+8*8)))(SR_matrix)
-        
-        return Model(inputs=input_preS,outputs=[SR_matrix,feat_preS],name='feat_S_model')    
+        self.is_varS_model = False    
 
 class FSA_net_Var_Metric(BaseMetricFSANet):
     def __init__(self, image_size,num_classes,stage_num,lambda_d, S_set):
         super(FSA_net_Var_Metric, self).__init__(image_size,num_classes,stage_num,lambda_d, S_set)
-
-    def ssr_feat_S_model_build(self, m_dim):
-        input_preS = Input((8,8,64))
-        def var(x):
-            mean, var = tf.nn.moments(x,axes=-1)
-            return var
-        feat_preS = Lambda(var)(input_preS)
-        feat_preS = Reshape((-1,))(feat_preS)
-        SR_matrix = Dense(m_dim*(8*8+8*8+8*8),activation='sigmoid')(feat_preS)
-        SR_matrix = Reshape((m_dim,(8*8+8*8+8*8)))(SR_matrix)
-        
-        return Model(inputs=input_preS,outputs=[SR_matrix,feat_preS],name='feat_S_model')    
+        self.is_varS_model = True
         
 class FSA_net_noS_Metric(BaseMetricFSANet):
     def __init__(self, image_size,num_classes,stage_num,lambda_d, S_set):
