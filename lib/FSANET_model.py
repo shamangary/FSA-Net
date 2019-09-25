@@ -1,6 +1,9 @@
-import logging
 import sys
+import logging
 import numpy as np
+
+import tensorflow as tf
+
 from keras.models import Model
 from keras.layers import *
 from keras.layers.convolutional import Conv2D, AveragePooling2D, MaxPooling2D, SeparableConv2D
@@ -12,14 +15,10 @@ from keras.optimizers import SGD,Adam
 from keras.applications.mobilenet import MobileNet
 from keras.utils import plot_model
 from keras.engine.topology import Layer
-from keras import activations, initializers, regularizers, constraints
-import tensorflow as tf
-
-
-from keras.layers.advanced_activations import PReLU
-
 from keras.layers.recurrent import *
 from keras.layers.wrappers import *
+from keras.layers.advanced_activations import PReLU
+from keras import activations, initializers, regularizers, constraints
 
 from .utils import get_initial_weights
 from .capsulelayers import *
@@ -51,6 +50,98 @@ class BaseFSANet(object):
 
         self.F_shape = int(self.num_capsule/3)*self.dim_capsule
 
+    def ssr_G_model_build(self, img_inputs):
+        #-------------------------------------------------------------------------------------------------------------------------
+        x = SeparableConv2D(16,(3,3),padding='same')(img_inputs)
+        x = BatchNormalization(axis=-1)(x)
+        x = Activation('relu')(x)
+        x_layer1 = AveragePooling2D((2,2))(x)
+        x = SeparableConv2D(32,(3,3),padding='same')(x_layer1)
+        x = BatchNormalization(axis=-1)(x)
+        x = Activation('relu')(x)
+        x = SeparableConv2D(32,(3,3),padding='same')(x)
+        x = BatchNormalization(axis=-1)(x)
+        x = Activation('relu')(x)
+        x_layer2 = AveragePooling2D((2,2))(x)
+        x = SeparableConv2D(64,(3,3),padding='same')(x_layer2)
+        x = BatchNormalization(axis=-1)(x)
+        x = Activation('relu')(x)
+        x = SeparableConv2D(64,(3,3),padding='same')(x)
+        x = BatchNormalization(axis=-1)(x)
+        x = Activation('relu')(x)
+        x_layer3 = AveragePooling2D((2,2))(x)
+        x = SeparableConv2D(128,(3,3),padding='same')(x_layer3)
+        x = BatchNormalization(axis=-1)(x)
+        x = Activation('relu')(x)
+        x = SeparableConv2D(128,(3,3),padding='same')(x)
+        x = BatchNormalization(axis=-1)(x)
+        x_layer4 = Activation('relu')(x)
+        #-------------------------------------------------------------------------------------------------------------------------
+        s = SeparableConv2D(16,(3,3),padding='same')(img_inputs)
+        s = BatchNormalization(axis=-1)(s)
+        s = Activation('tanh')(s)
+        s_layer1 = MaxPooling2D((2,2))(s)
+        s = SeparableConv2D(32,(3,3),padding='same')(s_layer1)
+        s = BatchNormalization(axis=-1)(s)
+        s = Activation('tanh')(s)
+        s = SeparableConv2D(32,(3,3),padding='same')(s)
+        s = BatchNormalization(axis=-1)(s)
+        s = Activation('tanh')(s)
+        s_layer2 = MaxPooling2D((2,2))(s)
+        s = SeparableConv2D(64,(3,3),padding='same')(s_layer2)
+        s = BatchNormalization(axis=-1)(s)
+        s = Activation('tanh')(s)
+        s = SeparableConv2D(64,(3,3),padding='same')(s)
+        s = BatchNormalization(axis=-1)(s)
+        s = Activation('tanh')(s)
+        s_layer3 = MaxPooling2D((2,2))(s)
+        s = SeparableConv2D(128,(3,3),padding='same')(s_layer3)
+        s = BatchNormalization(axis=-1)(s)
+        s = Activation('tanh')(s)
+        s = SeparableConv2D(128,(3,3),padding='same')(s)
+        s = BatchNormalization(axis=-1)(s)
+        s_layer4 = Activation('tanh')(s)
+        #-------------------------------------------------------------------------------------------------------------------------
+        
+        s_layer4 = Conv2D(64,(1,1),activation='tanh')(s_layer4)
+        # s_layer4 = MaxPooling2D((2,2))(s_layer4)
+
+        x_layer4 = Conv2D(64,(1,1),activation='relu')(x_layer4)
+        # x_layer4 = AveragePooling2D((2,2))(x_layer4)
+
+        feat_s1_pre = Multiply()([s_layer4,x_layer4])
+        # feat_s1_pre = Flatten()(feat_s1_pre)
+        #-------------------------------------------------------------------------------------------------------------------------
+        s_layer3 = Conv2D(64,(1,1),activation='tanh')(s_layer3)
+        # s_layer3 = MaxPooling2D((2,2))(s_layer3)
+
+        x_layer3 = Conv2D(64,(1,1),activation='relu')(x_layer3)
+        # x_layer3 = AveragePooling2D((2,2))(x_layer3)
+
+        feat_s2_pre = Multiply()([s_layer3,x_layer3])
+        # feat_s2_pre  = Flatten()(feat_s2_pre)
+        #-------------------------------------------------------------------------------------------------------------------------
+        s_layer2 = Conv2D(64,(1,1),activation='tanh')(s_layer2)
+        # s_layer2 = MaxPooling2D((2,2))(s_layer2)
+
+        x_layer2 = Conv2D(64,(1,1),activation='relu')(x_layer2)
+        # x_layer2 = AveragePooling2D((2,2))(x_layer2)
+
+        feat_s3_pre = Multiply()([s_layer2,x_layer2])
+        # feat_s3_pre  = Flatten()(feat_s3_pre)
+        #-------------------------------------------------------------------------------------------------------------------------
+        
+        # Spatial Pyramid Pooling
+        #feat_s1_pre = SpatialPyramidPooling([1, 2, 4],'average')(feat_s1_pre)        
+        #feat_s2_pre = SpatialPyramidPooling([1, 2, 4],'average')(feat_s2_pre)
+        #feat_s3_pre = SpatialPyramidPooling([1, 2, 4],'average')(feat_s3_pre)
+        # feat_s1_pre = GlobalAveragePooling2D()(feat_s1_pre)
+        # feat_s2_pre = GlobalAveragePooling2D()(feat_s2_pre)
+        feat_s3_pre = AveragePooling2D((2,2))(feat_s3_pre) # make sure (8x8x64) feature maps 
+    
+        ssr_G_model = Model(inputs=img_inputs,outputs=[feat_s1_pre,feat_s2_pre,feat_s3_pre], name='ssr_G_model')
+        return ssr_G_model
+
 
 class FSA_net_Capsule(BaseFSANet):
     def __init__(self, image_size,num_classes,stage_num,lambda_d, S_set):
@@ -59,100 +150,9 @@ class FSA_net_Capsule(BaseFSANet):
     def __call__(self):
         logging.debug("Creating model...")
 
-        img_inputs = Input(self._input_shape)
-        def ssr_G_model_build(img_inputs):
-            #-------------------------------------------------------------------------------------------------------------------------
-            x = SeparableConv2D(16,(3,3),padding='same')(img_inputs)
-            x = BatchNormalization(axis=-1)(x)
-            x = Activation('relu')(x)
-            x_layer1 = AveragePooling2D((2,2))(x)
-            x = SeparableConv2D(32,(3,3),padding='same')(x_layer1)
-            x = BatchNormalization(axis=-1)(x)
-            x = Activation('relu')(x)
-            x = SeparableConv2D(32,(3,3),padding='same')(x)
-            x = BatchNormalization(axis=-1)(x)
-            x = Activation('relu')(x)
-            x_layer2 = AveragePooling2D((2,2))(x)
-            x = SeparableConv2D(64,(3,3),padding='same')(x_layer2)
-            x = BatchNormalization(axis=-1)(x)
-            x = Activation('relu')(x)
-            x = SeparableConv2D(64,(3,3),padding='same')(x)
-            x = BatchNormalization(axis=-1)(x)
-            x = Activation('relu')(x)
-            x_layer3 = AveragePooling2D((2,2))(x)
-            x = SeparableConv2D(128,(3,3),padding='same')(x_layer3)
-            x = BatchNormalization(axis=-1)(x)
-            x = Activation('relu')(x)
-            x = SeparableConv2D(128,(3,3),padding='same')(x)
-            x = BatchNormalization(axis=-1)(x)
-            x_layer4 = Activation('relu')(x)
-            #-------------------------------------------------------------------------------------------------------------------------
-            s = SeparableConv2D(16,(3,3),padding='same')(img_inputs)
-            s = BatchNormalization(axis=-1)(s)
-            s = Activation('tanh')(s)
-            s_layer1 = MaxPooling2D((2,2))(s)
-            s = SeparableConv2D(32,(3,3),padding='same')(s_layer1)
-            s = BatchNormalization(axis=-1)(s)
-            s = Activation('tanh')(s)
-            s = SeparableConv2D(32,(3,3),padding='same')(s)
-            s = BatchNormalization(axis=-1)(s)
-            s = Activation('tanh')(s)
-            s_layer2 = MaxPooling2D((2,2))(s)
-            s = SeparableConv2D(64,(3,3),padding='same')(s_layer2)
-            s = BatchNormalization(axis=-1)(s)
-            s = Activation('tanh')(s)
-            s = SeparableConv2D(64,(3,3),padding='same')(s)
-            s = BatchNormalization(axis=-1)(s)
-            s = Activation('tanh')(s)
-            s_layer3 = MaxPooling2D((2,2))(s)
-            s = SeparableConv2D(128,(3,3),padding='same')(s_layer3)
-            s = BatchNormalization(axis=-1)(s)
-            s = Activation('tanh')(s)
-            s = SeparableConv2D(128,(3,3),padding='same')(s)
-            s = BatchNormalization(axis=-1)(s)
-            s_layer4 = Activation('tanh')(s)
-            #-------------------------------------------------------------------------------------------------------------------------
-            
-            s_layer4 = Conv2D(64,(1,1),activation='tanh')(s_layer4)
-            # s_layer4 = MaxPooling2D((2,2))(s_layer4)
+        img_inputs = Input(self._input_shape)        
 
-            x_layer4 = Conv2D(64,(1,1),activation='relu')(x_layer4)
-            # x_layer4 = AveragePooling2D((2,2))(x_layer4)
-
-            feat_s1_pre = Multiply()([s_layer4,x_layer4])
-            # feat_s1_pre = Flatten()(feat_s1_pre)
-            #-------------------------------------------------------------------------------------------------------------------------
-            s_layer3 = Conv2D(64,(1,1),activation='tanh')(s_layer3)
-            # s_layer3 = MaxPooling2D((2,2))(s_layer3)
-
-            x_layer3 = Conv2D(64,(1,1),activation='relu')(x_layer3)
-            # x_layer3 = AveragePooling2D((2,2))(x_layer3)
-
-            feat_s2_pre = Multiply()([s_layer3,x_layer3])
-            # feat_s2_pre  = Flatten()(feat_s2_pre)
-            #-------------------------------------------------------------------------------------------------------------------------
-            s_layer2 = Conv2D(64,(1,1),activation='tanh')(s_layer2)
-            # s_layer2 = MaxPooling2D((2,2))(s_layer2)
-
-            x_layer2 = Conv2D(64,(1,1),activation='relu')(x_layer2)
-            # x_layer2 = AveragePooling2D((2,2))(x_layer2)
-
-            feat_s3_pre = Multiply()([s_layer2,x_layer2])
-            # feat_s3_pre  = Flatten()(feat_s3_pre)
-            #-------------------------------------------------------------------------------------------------------------------------
-            
-            # Spatial Pyramid Pooling
-            #feat_s1_pre = SpatialPyramidPooling([1, 2, 4],'average')(feat_s1_pre)        
-            #feat_s2_pre = SpatialPyramidPooling([1, 2, 4],'average')(feat_s2_pre)
-            #feat_s3_pre = SpatialPyramidPooling([1, 2, 4],'average')(feat_s3_pre)
-            # feat_s1_pre = GlobalAveragePooling2D()(feat_s1_pre)
-            # feat_s2_pre = GlobalAveragePooling2D()(feat_s2_pre)
-            feat_s3_pre = AveragePooling2D((2,2))(feat_s3_pre) # make sure (8x8x64) feature maps 
-        
-            ssr_G_model = Model(inputs=img_inputs,outputs=[feat_s1_pre,feat_s2_pre,feat_s3_pre], name='ssr_G_model')
-            return ssr_G_model
-
-        ssr_G_model = ssr_G_model_build(img_inputs)
+        ssr_G_model = self.ssr_G_model_build(img_inputs)
         def ssr_feat_S_model_build(num_primcaps, m_dim):
             input_preS = Input((8,8,64))
 
@@ -313,11 +313,10 @@ class FSA_net_Capsule(BaseFSANet):
         ssr_F_Cap_list = ssr_F_Cap_model(ssr_Cap_list)
         pred_pose = Lambda(SSR_module,arguments={'s1':self.stage_num[0],'s2':self.stage_num[1],'s3':self.stage_num[2],'lambda_d':self.lambda_d},name='pred_pose')(ssr_F_Cap_list)
         
-
         model = Model(inputs=img_inputs, outputs=pred_pose)
-
-
         return model
+
+
 class FSA_net_Var_Capsule(BaseFSANet):
     def __init__(self, image_size,num_classes,stage_num,lambda_d, S_set):
         super(FSA_net_Var_Capsule, self).__init__(image_size,num_classes,stage_num,lambda_d, S_set)   
@@ -326,99 +325,7 @@ class FSA_net_Var_Capsule(BaseFSANet):
         logging.debug("Creating model...")
 
         img_inputs = Input(self._input_shape)
-        def ssr_G_model_build(img_inputs):
-            #-------------------------------------------------------------------------------------------------------------------------
-            x = SeparableConv2D(16,(3,3),padding='same')(img_inputs)
-            x = BatchNormalization(axis=-1)(x)
-            x = Activation('relu')(x)
-            x_layer1 = AveragePooling2D((2,2))(x)
-            x = SeparableConv2D(32,(3,3),padding='same')(x_layer1)
-            x = BatchNormalization(axis=-1)(x)
-            x = Activation('relu')(x)
-            x = SeparableConv2D(32,(3,3),padding='same')(x)
-            x = BatchNormalization(axis=-1)(x)
-            x = Activation('relu')(x)
-            x_layer2 = AveragePooling2D((2,2))(x)
-            x = SeparableConv2D(64,(3,3),padding='same')(x_layer2)
-            x = BatchNormalization(axis=-1)(x)
-            x = Activation('relu')(x)
-            x = SeparableConv2D(64,(3,3),padding='same')(x)
-            x = BatchNormalization(axis=-1)(x)
-            x = Activation('relu')(x)
-            x_layer3 = AveragePooling2D((2,2))(x)
-            x = SeparableConv2D(128,(3,3),padding='same')(x_layer3)
-            x = BatchNormalization(axis=-1)(x)
-            x = Activation('relu')(x)
-            x = SeparableConv2D(128,(3,3),padding='same')(x)
-            x = BatchNormalization(axis=-1)(x)
-            x_layer4 = Activation('relu')(x)
-            #-------------------------------------------------------------------------------------------------------------------------
-            s = SeparableConv2D(16,(3,3),padding='same')(img_inputs)
-            s = BatchNormalization(axis=-1)(s)
-            s = Activation('tanh')(s)
-            s_layer1 = MaxPooling2D((2,2))(s)
-            s = SeparableConv2D(32,(3,3),padding='same')(s_layer1)
-            s = BatchNormalization(axis=-1)(s)
-            s = Activation('tanh')(s)
-            s = SeparableConv2D(32,(3,3),padding='same')(s)
-            s = BatchNormalization(axis=-1)(s)
-            s = Activation('tanh')(s)
-            s_layer2 = MaxPooling2D((2,2))(s)
-            s = SeparableConv2D(64,(3,3),padding='same')(s_layer2)
-            s = BatchNormalization(axis=-1)(s)
-            s = Activation('tanh')(s)
-            s = SeparableConv2D(64,(3,3),padding='same')(s)
-            s = BatchNormalization(axis=-1)(s)
-            s = Activation('tanh')(s)
-            s_layer3 = MaxPooling2D((2,2))(s)
-            s = SeparableConv2D(128,(3,3),padding='same')(s_layer3)
-            s = BatchNormalization(axis=-1)(s)
-            s = Activation('tanh')(s)
-            s = SeparableConv2D(128,(3,3),padding='same')(s)
-            s = BatchNormalization(axis=-1)(s)
-            s_layer4 = Activation('tanh')(s)
-            #-------------------------------------------------------------------------------------------------------------------------
-            
-            s_layer4 = Conv2D(64,(1,1),activation='tanh')(s_layer4)
-            # s_layer4 = MaxPooling2D((2,2))(s_layer4)
-
-            x_layer4 = Conv2D(64,(1,1),activation='relu')(x_layer4)
-            # x_layer4 = AveragePooling2D((2,2))(x_layer4)
-
-            feat_s1_pre = Multiply()([s_layer4,x_layer4])
-            # feat_s1_pre = Flatten()(feat_s1_pre)
-            #-------------------------------------------------------------------------------------------------------------------------
-            s_layer3 = Conv2D(64,(1,1),activation='tanh')(s_layer3)
-            # s_layer3 = MaxPooling2D((2,2))(s_layer3)
-
-            x_layer3 = Conv2D(64,(1,1),activation='relu')(x_layer3)
-            # x_layer3 = AveragePooling2D((2,2))(x_layer3)
-
-            feat_s2_pre = Multiply()([s_layer3,x_layer3])
-            # feat_s2_pre  = Flatten()(feat_s2_pre)
-            #-------------------------------------------------------------------------------------------------------------------------
-            s_layer2 = Conv2D(64,(1,1),activation='tanh')(s_layer2)
-            # s_layer2 = MaxPooling2D((2,2))(s_layer2)
-
-            x_layer2 = Conv2D(64,(1,1),activation='relu')(x_layer2)
-            # x_layer2 = AveragePooling2D((2,2))(x_layer2)
-
-            feat_s3_pre = Multiply()([s_layer2,x_layer2])
-            # feat_s3_pre  = Flatten()(feat_s3_pre)
-            #-------------------------------------------------------------------------------------------------------------------------
-            
-            # Spatial Pyramid Pooling
-            #feat_s1_pre = SpatialPyramidPooling([1, 2, 4],'average')(feat_s1_pre)        
-            #feat_s2_pre = SpatialPyramidPooling([1, 2, 4],'average')(feat_s2_pre)
-            #feat_s3_pre = SpatialPyramidPooling([1, 2, 4],'average')(feat_s3_pre)
-            # feat_s1_pre = GlobalAveragePooling2D()(feat_s1_pre)
-            # feat_s2_pre = GlobalAveragePooling2D()(feat_s2_pre)
-            feat_s3_pre = AveragePooling2D((2,2))(feat_s3_pre) # make sure (8x8x64) feature maps 
-        
-            ssr_G_model = Model(inputs=img_inputs,outputs=[feat_s1_pre,feat_s2_pre,feat_s3_pre], name='ssr_G_model')
-            return ssr_G_model
-
-        ssr_G_model = ssr_G_model_build(img_inputs)
+        ssr_G_model = self.ssr_G_model_build(img_inputs)
         def ssr_feat_S_model_build(num_primcaps, m_dim):
             input_preS = Input((8,8,64))
 
@@ -598,99 +505,7 @@ class FSA_net_noS_Capsule(BaseFSANet):
         logging.debug("Creating model...")
 
         img_inputs = Input(self._input_shape)
-        def ssr_G_model_build(img_inputs):
-            #-------------------------------------------------------------------------------------------------------------------------
-            x = SeparableConv2D(16,(3,3),padding='same')(img_inputs)
-            x = BatchNormalization(axis=-1)(x)
-            x = Activation('relu')(x)
-            x_layer1 = AveragePooling2D((2,2))(x)
-            x = SeparableConv2D(32,(3,3),padding='same')(x_layer1)
-            x = BatchNormalization(axis=-1)(x)
-            x = Activation('relu')(x)
-            x = SeparableConv2D(32,(3,3),padding='same')(x)
-            x = BatchNormalization(axis=-1)(x)
-            x = Activation('relu')(x)
-            x_layer2 = AveragePooling2D((2,2))(x)
-            x = SeparableConv2D(64,(3,3),padding='same')(x_layer2)
-            x = BatchNormalization(axis=-1)(x)
-            x = Activation('relu')(x)
-            x = SeparableConv2D(64,(3,3),padding='same')(x)
-            x = BatchNormalization(axis=-1)(x)
-            x = Activation('relu')(x)
-            x_layer3 = AveragePooling2D((2,2))(x)
-            x = SeparableConv2D(128,(3,3),padding='same')(x_layer3)
-            x = BatchNormalization(axis=-1)(x)
-            x = Activation('relu')(x)
-            x = SeparableConv2D(128,(3,3),padding='same')(x)
-            x = BatchNormalization(axis=-1)(x)
-            x_layer4 = Activation('relu')(x)
-            #-------------------------------------------------------------------------------------------------------------------------
-            s = SeparableConv2D(16,(3,3),padding='same')(img_inputs)
-            s = BatchNormalization(axis=-1)(s)
-            s = Activation('tanh')(s)
-            s_layer1 = MaxPooling2D((2,2))(s)
-            s = SeparableConv2D(32,(3,3),padding='same')(s_layer1)
-            s = BatchNormalization(axis=-1)(s)
-            s = Activation('tanh')(s)
-            s = SeparableConv2D(32,(3,3),padding='same')(s)
-            s = BatchNormalization(axis=-1)(s)
-            s = Activation('tanh')(s)
-            s_layer2 = MaxPooling2D((2,2))(s)
-            s = SeparableConv2D(64,(3,3),padding='same')(s_layer2)
-            s = BatchNormalization(axis=-1)(s)
-            s = Activation('tanh')(s)
-            s = SeparableConv2D(64,(3,3),padding='same')(s)
-            s = BatchNormalization(axis=-1)(s)
-            s = Activation('tanh')(s)
-            s_layer3 = MaxPooling2D((2,2))(s)
-            s = SeparableConv2D(128,(3,3),padding='same')(s_layer3)
-            s = BatchNormalization(axis=-1)(s)
-            s = Activation('tanh')(s)
-            s = SeparableConv2D(128,(3,3),padding='same')(s)
-            s = BatchNormalization(axis=-1)(s)
-            s_layer4 = Activation('tanh')(s)
-            #-------------------------------------------------------------------------------------------------------------------------
-            
-            s_layer4 = Conv2D(64,(1,1),activation='tanh')(s_layer4)
-            # s_layer4 = MaxPooling2D((2,2))(s_layer4)
-
-            x_layer4 = Conv2D(64,(1,1),activation='relu')(x_layer4)
-            # x_layer4 = AveragePooling2D((2,2))(x_layer4)
-
-            feat_s1_pre = Multiply()([s_layer4,x_layer4])
-            # feat_s1_pre = Flatten()(feat_s1_pre)
-            #-------------------------------------------------------------------------------------------------------------------------
-            s_layer3 = Conv2D(64,(1,1),activation='tanh')(s_layer3)
-            # s_layer3 = MaxPooling2D((2,2))(s_layer3)
-
-            x_layer3 = Conv2D(64,(1,1),activation='relu')(x_layer3)
-            # x_layer3 = AveragePooling2D((2,2))(x_layer3)
-
-            feat_s2_pre = Multiply()([s_layer3,x_layer3])
-            # feat_s2_pre  = Flatten()(feat_s2_pre)
-            #-------------------------------------------------------------------------------------------------------------------------
-            s_layer2 = Conv2D(64,(1,1),activation='tanh')(s_layer2)
-            # s_layer2 = MaxPooling2D((2,2))(s_layer2)
-
-            x_layer2 = Conv2D(64,(1,1),activation='relu')(x_layer2)
-            # x_layer2 = AveragePooling2D((2,2))(x_layer2)
-
-            feat_s3_pre = Multiply()([s_layer2,x_layer2])
-            # feat_s3_pre  = Flatten()(feat_s3_pre)
-            #-------------------------------------------------------------------------------------------------------------------------
-            
-            # Spatial Pyramid Pooling
-            #feat_s1_pre = SpatialPyramidPooling([1, 2, 4],'average')(feat_s1_pre)        
-            #feat_s2_pre = SpatialPyramidPooling([1, 2, 4],'average')(feat_s2_pre)
-            #feat_s3_pre = SpatialPyramidPooling([1, 2, 4],'average')(feat_s3_pre)
-            # feat_s1_pre = GlobalAveragePooling2D()(feat_s1_pre)
-            # feat_s2_pre = GlobalAveragePooling2D()(feat_s2_pre)
-            feat_s3_pre = AveragePooling2D((2,2))(feat_s3_pre) # make sure (8x8x64) feature maps 
-        
-            ssr_G_model = Model(inputs=img_inputs,outputs=[feat_s1_pre,feat_s2_pre,feat_s3_pre], name='ssr_G_model')
-            return ssr_G_model
-
-        ssr_G_model = ssr_G_model_build(img_inputs)
+        ssr_G_model = self.ssr_G_model_build(img_inputs)
         #-------------------------------------------------------------------------------------------------------------------------
         def ssr_S_model_build():
             input_s1_preS = Input((8,8,64))
@@ -827,99 +642,7 @@ class FSA_net_Capsule_FC(BaseFSANet):
         logging.debug("Creating model...")
 
         img_inputs = Input(self._input_shape)
-        def ssr_G_model_build(img_inputs):
-            #-------------------------------------------------------------------------------------------------------------------------
-            x = SeparableConv2D(16,(3,3),padding='same')(img_inputs)
-            x = BatchNormalization(axis=-1)(x)
-            x = Activation('relu')(x)
-            x_layer1 = AveragePooling2D((2,2))(x)
-            x = SeparableConv2D(32,(3,3),padding='same')(x_layer1)
-            x = BatchNormalization(axis=-1)(x)
-            x = Activation('relu')(x)
-            x = SeparableConv2D(32,(3,3),padding='same')(x)
-            x = BatchNormalization(axis=-1)(x)
-            x = Activation('relu')(x)
-            x_layer2 = AveragePooling2D((2,2))(x)
-            x = SeparableConv2D(64,(3,3),padding='same')(x_layer2)
-            x = BatchNormalization(axis=-1)(x)
-            x = Activation('relu')(x)
-            x = SeparableConv2D(64,(3,3),padding='same')(x)
-            x = BatchNormalization(axis=-1)(x)
-            x = Activation('relu')(x)
-            x_layer3 = AveragePooling2D((2,2))(x)
-            x = SeparableConv2D(128,(3,3),padding='same')(x_layer3)
-            x = BatchNormalization(axis=-1)(x)
-            x = Activation('relu')(x)
-            x = SeparableConv2D(128,(3,3),padding='same')(x)
-            x = BatchNormalization(axis=-1)(x)
-            x_layer4 = Activation('relu')(x)
-            #-------------------------------------------------------------------------------------------------------------------------
-            s = SeparableConv2D(16,(3,3),padding='same')(img_inputs)
-            s = BatchNormalization(axis=-1)(s)
-            s = Activation('tanh')(s)
-            s_layer1 = MaxPooling2D((2,2))(s)
-            s = SeparableConv2D(32,(3,3),padding='same')(s_layer1)
-            s = BatchNormalization(axis=-1)(s)
-            s = Activation('tanh')(s)
-            s = SeparableConv2D(32,(3,3),padding='same')(s)
-            s = BatchNormalization(axis=-1)(s)
-            s = Activation('tanh')(s)
-            s_layer2 = MaxPooling2D((2,2))(s)
-            s = SeparableConv2D(64,(3,3),padding='same')(s_layer2)
-            s = BatchNormalization(axis=-1)(s)
-            s = Activation('tanh')(s)
-            s = SeparableConv2D(64,(3,3),padding='same')(s)
-            s = BatchNormalization(axis=-1)(s)
-            s = Activation('tanh')(s)
-            s_layer3 = MaxPooling2D((2,2))(s)
-            s = SeparableConv2D(128,(3,3),padding='same')(s_layer3)
-            s = BatchNormalization(axis=-1)(s)
-            s = Activation('tanh')(s)
-            s = SeparableConv2D(128,(3,3),padding='same')(s)
-            s = BatchNormalization(axis=-1)(s)
-            s_layer4 = Activation('tanh')(s)
-            #-------------------------------------------------------------------------------------------------------------------------
-            
-            s_layer4 = Conv2D(64,(1,1),activation='tanh')(s_layer4)
-            # s_layer4 = MaxPooling2D((2,2))(s_layer4)
-
-            x_layer4 = Conv2D(64,(1,1),activation='relu')(x_layer4)
-            # x_layer4 = AveragePooling2D((2,2))(x_layer4)
-
-            feat_s1_pre = Multiply()([s_layer4,x_layer4])
-            # feat_s1_pre = Flatten()(feat_s1_pre)
-            #-------------------------------------------------------------------------------------------------------------------------
-            s_layer3 = Conv2D(64,(1,1),activation='tanh')(s_layer3)
-            # s_layer3 = MaxPooling2D((2,2))(s_layer3)
-
-            x_layer3 = Conv2D(64,(1,1),activation='relu')(x_layer3)
-            # x_layer3 = AveragePooling2D((2,2))(x_layer3)
-
-            feat_s2_pre = Multiply()([s_layer3,x_layer3])
-            # feat_s2_pre  = Flatten()(feat_s2_pre)
-            #-------------------------------------------------------------------------------------------------------------------------
-            s_layer2 = Conv2D(64,(1,1),activation='tanh')(s_layer2)
-            # s_layer2 = MaxPooling2D((2,2))(s_layer2)
-
-            x_layer2 = Conv2D(64,(1,1),activation='relu')(x_layer2)
-            # x_layer2 = AveragePooling2D((2,2))(x_layer2)
-
-            feat_s3_pre = Multiply()([s_layer2,x_layer2])
-            # feat_s3_pre  = Flatten()(feat_s3_pre)
-            #-------------------------------------------------------------------------------------------------------------------------
-            
-            # Spatial Pyramid Pooling
-            #feat_s1_pre = SpatialPyramidPooling([1, 2, 4],'average')(feat_s1_pre)        
-            #feat_s2_pre = SpatialPyramidPooling([1, 2, 4],'average')(feat_s2_pre)
-            #feat_s3_pre = SpatialPyramidPooling([1, 2, 4],'average')(feat_s3_pre)
-            # feat_s1_pre = GlobalAveragePooling2D()(feat_s1_pre)
-            # feat_s2_pre = GlobalAveragePooling2D()(feat_s2_pre)
-            feat_s3_pre = AveragePooling2D((2,2))(feat_s3_pre) # make sure (8x8x64) feature maps 
-        
-            ssr_G_model = Model(inputs=img_inputs,outputs=[feat_s1_pre,feat_s2_pre,feat_s3_pre], name='ssr_G_model')
-            return ssr_G_model
-
-        ssr_G_model = ssr_G_model_build(img_inputs)
+        ssr_G_model = self.ssr_G_model_build(img_inputs)
         def ssr_feat_S_model_build(num_primcaps, m_dim):
             input_preS = Input((8,8,64))
 
@@ -1091,99 +814,7 @@ class FSA_net_Var_Capsule_FC(BaseFSANet):
         logging.debug("Creating model...")
 
         img_inputs = Input(self._input_shape)
-        def ssr_G_model_build(img_inputs):
-            #-------------------------------------------------------------------------------------------------------------------------
-            x = SeparableConv2D(16,(3,3),padding='same')(img_inputs)
-            x = BatchNormalization(axis=-1)(x)
-            x = Activation('relu')(x)
-            x_layer1 = AveragePooling2D((2,2))(x)
-            x = SeparableConv2D(32,(3,3),padding='same')(x_layer1)
-            x = BatchNormalization(axis=-1)(x)
-            x = Activation('relu')(x)
-            x = SeparableConv2D(32,(3,3),padding='same')(x)
-            x = BatchNormalization(axis=-1)(x)
-            x = Activation('relu')(x)
-            x_layer2 = AveragePooling2D((2,2))(x)
-            x = SeparableConv2D(64,(3,3),padding='same')(x_layer2)
-            x = BatchNormalization(axis=-1)(x)
-            x = Activation('relu')(x)
-            x = SeparableConv2D(64,(3,3),padding='same')(x)
-            x = BatchNormalization(axis=-1)(x)
-            x = Activation('relu')(x)
-            x_layer3 = AveragePooling2D((2,2))(x)
-            x = SeparableConv2D(128,(3,3),padding='same')(x_layer3)
-            x = BatchNormalization(axis=-1)(x)
-            x = Activation('relu')(x)
-            x = SeparableConv2D(128,(3,3),padding='same')(x)
-            x = BatchNormalization(axis=-1)(x)
-            x_layer4 = Activation('relu')(x)
-            #-------------------------------------------------------------------------------------------------------------------------
-            s = SeparableConv2D(16,(3,3),padding='same')(img_inputs)
-            s = BatchNormalization(axis=-1)(s)
-            s = Activation('tanh')(s)
-            s_layer1 = MaxPooling2D((2,2))(s)
-            s = SeparableConv2D(32,(3,3),padding='same')(s_layer1)
-            s = BatchNormalization(axis=-1)(s)
-            s = Activation('tanh')(s)
-            s = SeparableConv2D(32,(3,3),padding='same')(s)
-            s = BatchNormalization(axis=-1)(s)
-            s = Activation('tanh')(s)
-            s_layer2 = MaxPooling2D((2,2))(s)
-            s = SeparableConv2D(64,(3,3),padding='same')(s_layer2)
-            s = BatchNormalization(axis=-1)(s)
-            s = Activation('tanh')(s)
-            s = SeparableConv2D(64,(3,3),padding='same')(s)
-            s = BatchNormalization(axis=-1)(s)
-            s = Activation('tanh')(s)
-            s_layer3 = MaxPooling2D((2,2))(s)
-            s = SeparableConv2D(128,(3,3),padding='same')(s_layer3)
-            s = BatchNormalization(axis=-1)(s)
-            s = Activation('tanh')(s)
-            s = SeparableConv2D(128,(3,3),padding='same')(s)
-            s = BatchNormalization(axis=-1)(s)
-            s_layer4 = Activation('tanh')(s)
-            #-------------------------------------------------------------------------------------------------------------------------
-            
-            s_layer4 = Conv2D(64,(1,1),activation='tanh')(s_layer4)
-            # s_layer4 = MaxPooling2D((2,2))(s_layer4)
-
-            x_layer4 = Conv2D(64,(1,1),activation='relu')(x_layer4)
-            # x_layer4 = AveragePooling2D((2,2))(x_layer4)
-
-            feat_s1_pre = Multiply()([s_layer4,x_layer4])
-            # feat_s1_pre = Flatten()(feat_s1_pre)
-            #-------------------------------------------------------------------------------------------------------------------------
-            s_layer3 = Conv2D(64,(1,1),activation='tanh')(s_layer3)
-            # s_layer3 = MaxPooling2D((2,2))(s_layer3)
-
-            x_layer3 = Conv2D(64,(1,1),activation='relu')(x_layer3)
-            # x_layer3 = AveragePooling2D((2,2))(x_layer3)
-
-            feat_s2_pre = Multiply()([s_layer3,x_layer3])
-            # feat_s2_pre  = Flatten()(feat_s2_pre)
-            #-------------------------------------------------------------------------------------------------------------------------
-            s_layer2 = Conv2D(64,(1,1),activation='tanh')(s_layer2)
-            # s_layer2 = MaxPooling2D((2,2))(s_layer2)
-
-            x_layer2 = Conv2D(64,(1,1),activation='relu')(x_layer2)
-            # x_layer2 = AveragePooling2D((2,2))(x_layer2)
-
-            feat_s3_pre = Multiply()([s_layer2,x_layer2])
-            # feat_s3_pre  = Flatten()(feat_s3_pre)
-            #-------------------------------------------------------------------------------------------------------------------------
-            
-            # Spatial Pyramid Pooling
-            #feat_s1_pre = SpatialPyramidPooling([1, 2, 4],'average')(feat_s1_pre)        
-            #feat_s2_pre = SpatialPyramidPooling([1, 2, 4],'average')(feat_s2_pre)
-            #feat_s3_pre = SpatialPyramidPooling([1, 2, 4],'average')(feat_s3_pre)
-            # feat_s1_pre = GlobalAveragePooling2D()(feat_s1_pre)
-            # feat_s2_pre = GlobalAveragePooling2D()(feat_s2_pre)
-            feat_s3_pre = AveragePooling2D((2,2))(feat_s3_pre) # make sure (8x8x64) feature maps 
-        
-            ssr_G_model = Model(inputs=img_inputs,outputs=[feat_s1_pre,feat_s2_pre,feat_s3_pre], name='ssr_G_model')
-            return ssr_G_model
-
-        ssr_G_model = ssr_G_model_build(img_inputs)
+        ssr_G_model = self.ssr_G_model_build(img_inputs)
         def ssr_feat_S_model_build(num_primcaps, m_dim):
             input_preS = Input((8,8,64))
 
@@ -1360,99 +991,7 @@ class FSA_net_noS_Capsule_FC(BaseFSANet):
         logging.debug("Creating model...")
 
         img_inputs = Input(self._input_shape)
-        def ssr_G_model_build(img_inputs):
-            #-------------------------------------------------------------------------------------------------------------------------
-            x = SeparableConv2D(16,(3,3),padding='same')(img_inputs)
-            x = BatchNormalization(axis=-1)(x)
-            x = Activation('relu')(x)
-            x_layer1 = AveragePooling2D((2,2))(x)
-            x = SeparableConv2D(32,(3,3),padding='same')(x_layer1)
-            x = BatchNormalization(axis=-1)(x)
-            x = Activation('relu')(x)
-            x = SeparableConv2D(32,(3,3),padding='same')(x)
-            x = BatchNormalization(axis=-1)(x)
-            x = Activation('relu')(x)
-            x_layer2 = AveragePooling2D((2,2))(x)
-            x = SeparableConv2D(64,(3,3),padding='same')(x_layer2)
-            x = BatchNormalization(axis=-1)(x)
-            x = Activation('relu')(x)
-            x = SeparableConv2D(64,(3,3),padding='same')(x)
-            x = BatchNormalization(axis=-1)(x)
-            x = Activation('relu')(x)
-            x_layer3 = AveragePooling2D((2,2))(x)
-            x = SeparableConv2D(128,(3,3),padding='same')(x_layer3)
-            x = BatchNormalization(axis=-1)(x)
-            x = Activation('relu')(x)
-            x = SeparableConv2D(128,(3,3),padding='same')(x)
-            x = BatchNormalization(axis=-1)(x)
-            x_layer4 = Activation('relu')(x)
-            #-------------------------------------------------------------------------------------------------------------------------
-            s = SeparableConv2D(16,(3,3),padding='same')(img_inputs)
-            s = BatchNormalization(axis=-1)(s)
-            s = Activation('tanh')(s)
-            s_layer1 = MaxPooling2D((2,2))(s)
-            s = SeparableConv2D(32,(3,3),padding='same')(s_layer1)
-            s = BatchNormalization(axis=-1)(s)
-            s = Activation('tanh')(s)
-            s = SeparableConv2D(32,(3,3),padding='same')(s)
-            s = BatchNormalization(axis=-1)(s)
-            s = Activation('tanh')(s)
-            s_layer2 = MaxPooling2D((2,2))(s)
-            s = SeparableConv2D(64,(3,3),padding='same')(s_layer2)
-            s = BatchNormalization(axis=-1)(s)
-            s = Activation('tanh')(s)
-            s = SeparableConv2D(64,(3,3),padding='same')(s)
-            s = BatchNormalization(axis=-1)(s)
-            s = Activation('tanh')(s)
-            s_layer3 = MaxPooling2D((2,2))(s)
-            s = SeparableConv2D(128,(3,3),padding='same')(s_layer3)
-            s = BatchNormalization(axis=-1)(s)
-            s = Activation('tanh')(s)
-            s = SeparableConv2D(128,(3,3),padding='same')(s)
-            s = BatchNormalization(axis=-1)(s)
-            s_layer4 = Activation('tanh')(s)
-            #-------------------------------------------------------------------------------------------------------------------------
-            
-            s_layer4 = Conv2D(64,(1,1),activation='tanh')(s_layer4)
-            # s_layer4 = MaxPooling2D((2,2))(s_layer4)
-
-            x_layer4 = Conv2D(64,(1,1),activation='relu')(x_layer4)
-            # x_layer4 = AveragePooling2D((2,2))(x_layer4)
-
-            feat_s1_pre = Multiply()([s_layer4,x_layer4])
-            # feat_s1_pre = Flatten()(feat_s1_pre)
-            #-------------------------------------------------------------------------------------------------------------------------
-            s_layer3 = Conv2D(64,(1,1),activation='tanh')(s_layer3)
-            # s_layer3 = MaxPooling2D((2,2))(s_layer3)
-
-            x_layer3 = Conv2D(64,(1,1),activation='relu')(x_layer3)
-            # x_layer3 = AveragePooling2D((2,2))(x_layer3)
-
-            feat_s2_pre = Multiply()([s_layer3,x_layer3])
-            # feat_s2_pre  = Flatten()(feat_s2_pre)
-            #-------------------------------------------------------------------------------------------------------------------------
-            s_layer2 = Conv2D(64,(1,1),activation='tanh')(s_layer2)
-            # s_layer2 = MaxPooling2D((2,2))(s_layer2)
-
-            x_layer2 = Conv2D(64,(1,1),activation='relu')(x_layer2)
-            # x_layer2 = AveragePooling2D((2,2))(x_layer2)
-
-            feat_s3_pre = Multiply()([s_layer2,x_layer2])
-            # feat_s3_pre  = Flatten()(feat_s3_pre)
-            #-------------------------------------------------------------------------------------------------------------------------
-            
-            # Spatial Pyramid Pooling
-            #feat_s1_pre = SpatialPyramidPooling([1, 2, 4],'average')(feat_s1_pre)        
-            #feat_s2_pre = SpatialPyramidPooling([1, 2, 4],'average')(feat_s2_pre)
-            #feat_s3_pre = SpatialPyramidPooling([1, 2, 4],'average')(feat_s3_pre)
-            # feat_s1_pre = GlobalAveragePooling2D()(feat_s1_pre)
-            # feat_s2_pre = GlobalAveragePooling2D()(feat_s2_pre)
-            feat_s3_pre = AveragePooling2D((2,2))(feat_s3_pre) # make sure (8x8x64) feature maps 
-        
-            ssr_G_model = Model(inputs=img_inputs,outputs=[feat_s1_pre,feat_s2_pre,feat_s3_pre], name='ssr_G_model')
-            return ssr_G_model
-
-        ssr_G_model = ssr_G_model_build(img_inputs)
+        ssr_G_model = self.ssr_G_model_build(img_inputs)
         #-------------------------------------------------------------------------------------------------------------------------
         def ssr_S_model_build():
             input_s1_preS = Input((8,8,64))
@@ -1585,99 +1124,7 @@ class FSA_net_NetVLAD(BaseFSANet):
         logging.debug("Creating model...")
 
         img_inputs = Input(self._input_shape)
-        def ssr_G_model_build(img_inputs):
-            #-------------------------------------------------------------------------------------------------------------------------
-            x = SeparableConv2D(16,(3,3),padding='same')(img_inputs)
-            x = BatchNormalization(axis=-1)(x)
-            x = Activation('relu')(x)
-            x_layer1 = AveragePooling2D((2,2))(x)
-            x = SeparableConv2D(32,(3,3),padding='same')(x_layer1)
-            x = BatchNormalization(axis=-1)(x)
-            x = Activation('relu')(x)
-            x = SeparableConv2D(32,(3,3),padding='same')(x)
-            x = BatchNormalization(axis=-1)(x)
-            x = Activation('relu')(x)
-            x_layer2 = AveragePooling2D((2,2))(x)
-            x = SeparableConv2D(64,(3,3),padding='same')(x_layer2)
-            x = BatchNormalization(axis=-1)(x)
-            x = Activation('relu')(x)
-            x = SeparableConv2D(64,(3,3),padding='same')(x)
-            x = BatchNormalization(axis=-1)(x)
-            x = Activation('relu')(x)
-            x_layer3 = AveragePooling2D((2,2))(x)
-            x = SeparableConv2D(128,(3,3),padding='same')(x_layer3)
-            x = BatchNormalization(axis=-1)(x)
-            x = Activation('relu')(x)
-            x = SeparableConv2D(128,(3,3),padding='same')(x)
-            x = BatchNormalization(axis=-1)(x)
-            x_layer4 = Activation('relu')(x)
-            #-------------------------------------------------------------------------------------------------------------------------
-            s = SeparableConv2D(16,(3,3),padding='same')(img_inputs)
-            s = BatchNormalization(axis=-1)(s)
-            s = Activation('tanh')(s)
-            s_layer1 = MaxPooling2D((2,2))(s)
-            s = SeparableConv2D(32,(3,3),padding='same')(s_layer1)
-            s = BatchNormalization(axis=-1)(s)
-            s = Activation('tanh')(s)
-            s = SeparableConv2D(32,(3,3),padding='same')(s)
-            s = BatchNormalization(axis=-1)(s)
-            s = Activation('tanh')(s)
-            s_layer2 = MaxPooling2D((2,2))(s)
-            s = SeparableConv2D(64,(3,3),padding='same')(s_layer2)
-            s = BatchNormalization(axis=-1)(s)
-            s = Activation('tanh')(s)
-            s = SeparableConv2D(64,(3,3),padding='same')(s)
-            s = BatchNormalization(axis=-1)(s)
-            s = Activation('tanh')(s)
-            s_layer3 = MaxPooling2D((2,2))(s)
-            s = SeparableConv2D(128,(3,3),padding='same')(s_layer3)
-            s = BatchNormalization(axis=-1)(s)
-            s = Activation('tanh')(s)
-            s = SeparableConv2D(128,(3,3),padding='same')(s)
-            s = BatchNormalization(axis=-1)(s)
-            s_layer4 = Activation('tanh')(s)
-            #-------------------------------------------------------------------------------------------------------------------------
-            
-            s_layer4 = Conv2D(64,(1,1),activation='tanh')(s_layer4)
-            # s_layer4 = MaxPooling2D((2,2))(s_layer4)
-
-            x_layer4 = Conv2D(64,(1,1),activation='relu')(x_layer4)
-            # x_layer4 = AveragePooling2D((2,2))(x_layer4)
-
-            feat_s1_pre = Multiply()([s_layer4,x_layer4])
-            # feat_s1_pre = Flatten()(feat_s1_pre)
-            #-------------------------------------------------------------------------------------------------------------------------
-            s_layer3 = Conv2D(64,(1,1),activation='tanh')(s_layer3)
-            # s_layer3 = MaxPooling2D((2,2))(s_layer3)
-
-            x_layer3 = Conv2D(64,(1,1),activation='relu')(x_layer3)
-            # x_layer3 = AveragePooling2D((2,2))(x_layer3)
-
-            feat_s2_pre = Multiply()([s_layer3,x_layer3])
-            # feat_s2_pre  = Flatten()(feat_s2_pre)
-            #-------------------------------------------------------------------------------------------------------------------------
-            s_layer2 = Conv2D(64,(1,1),activation='tanh')(s_layer2)
-            # s_layer2 = MaxPooling2D((2,2))(s_layer2)
-
-            x_layer2 = Conv2D(64,(1,1),activation='relu')(x_layer2)
-            # x_layer2 = AveragePooling2D((2,2))(x_layer2)
-
-            feat_s3_pre = Multiply()([s_layer2,x_layer2])
-            # feat_s3_pre  = Flatten()(feat_s3_pre)
-            #-------------------------------------------------------------------------------------------------------------------------
-            
-            # Spatial Pyramid Pooling
-            #feat_s1_pre = SpatialPyramidPooling([1, 2, 4],'average')(feat_s1_pre)        
-            #feat_s2_pre = SpatialPyramidPooling([1, 2, 4],'average')(feat_s2_pre)
-            #feat_s3_pre = SpatialPyramidPooling([1, 2, 4],'average')(feat_s3_pre)
-            # feat_s1_pre = GlobalAveragePooling2D()(feat_s1_pre)
-            # feat_s2_pre = GlobalAveragePooling2D()(feat_s2_pre)
-            feat_s3_pre = AveragePooling2D((2,2))(feat_s3_pre) # make sure (8x8x64) feature maps 
-        
-            ssr_G_model = Model(inputs=img_inputs,outputs=[feat_s1_pre,feat_s2_pre,feat_s3_pre], name='ssr_G_model')
-            return ssr_G_model
-
-        ssr_G_model = ssr_G_model_build(img_inputs)
+        ssr_G_model = self.ssr_G_model_build(img_inputs)
         def ssr_feat_S_model_build(num_primcaps, m_dim):
             input_preS = Input((8,8,64))
 
@@ -1851,99 +1298,7 @@ class FSA_net_Var_NetVLAD(BaseFSANet):
         logging.debug("Creating model...")
 
         img_inputs = Input(self._input_shape)
-        def ssr_G_model_build(img_inputs):
-            #-------------------------------------------------------------------------------------------------------------------------
-            x = SeparableConv2D(16,(3,3),padding='same')(img_inputs)
-            x = BatchNormalization(axis=-1)(x)
-            x = Activation('relu')(x)
-            x_layer1 = AveragePooling2D((2,2))(x)
-            x = SeparableConv2D(32,(3,3),padding='same')(x_layer1)
-            x = BatchNormalization(axis=-1)(x)
-            x = Activation('relu')(x)
-            x = SeparableConv2D(32,(3,3),padding='same')(x)
-            x = BatchNormalization(axis=-1)(x)
-            x = Activation('relu')(x)
-            x_layer2 = AveragePooling2D((2,2))(x)
-            x = SeparableConv2D(64,(3,3),padding='same')(x_layer2)
-            x = BatchNormalization(axis=-1)(x)
-            x = Activation('relu')(x)
-            x = SeparableConv2D(64,(3,3),padding='same')(x)
-            x = BatchNormalization(axis=-1)(x)
-            x = Activation('relu')(x)
-            x_layer3 = AveragePooling2D((2,2))(x)
-            x = SeparableConv2D(128,(3,3),padding='same')(x_layer3)
-            x = BatchNormalization(axis=-1)(x)
-            x = Activation('relu')(x)
-            x = SeparableConv2D(128,(3,3),padding='same')(x)
-            x = BatchNormalization(axis=-1)(x)
-            x_layer4 = Activation('relu')(x)
-            #-------------------------------------------------------------------------------------------------------------------------
-            s = SeparableConv2D(16,(3,3),padding='same')(img_inputs)
-            s = BatchNormalization(axis=-1)(s)
-            s = Activation('tanh')(s)
-            s_layer1 = MaxPooling2D((2,2))(s)
-            s = SeparableConv2D(32,(3,3),padding='same')(s_layer1)
-            s = BatchNormalization(axis=-1)(s)
-            s = Activation('tanh')(s)
-            s = SeparableConv2D(32,(3,3),padding='same')(s)
-            s = BatchNormalization(axis=-1)(s)
-            s = Activation('tanh')(s)
-            s_layer2 = MaxPooling2D((2,2))(s)
-            s = SeparableConv2D(64,(3,3),padding='same')(s_layer2)
-            s = BatchNormalization(axis=-1)(s)
-            s = Activation('tanh')(s)
-            s = SeparableConv2D(64,(3,3),padding='same')(s)
-            s = BatchNormalization(axis=-1)(s)
-            s = Activation('tanh')(s)
-            s_layer3 = MaxPooling2D((2,2))(s)
-            s = SeparableConv2D(128,(3,3),padding='same')(s_layer3)
-            s = BatchNormalization(axis=-1)(s)
-            s = Activation('tanh')(s)
-            s = SeparableConv2D(128,(3,3),padding='same')(s)
-            s = BatchNormalization(axis=-1)(s)
-            s_layer4 = Activation('tanh')(s)
-            #-------------------------------------------------------------------------------------------------------------------------
-            
-            s_layer4 = Conv2D(64,(1,1),activation='tanh')(s_layer4)
-            # s_layer4 = MaxPooling2D((2,2))(s_layer4)
-
-            x_layer4 = Conv2D(64,(1,1),activation='relu')(x_layer4)
-            # x_layer4 = AveragePooling2D((2,2))(x_layer4)
-
-            feat_s1_pre = Multiply()([s_layer4,x_layer4])
-            # feat_s1_pre = Flatten()(feat_s1_pre)
-            #-------------------------------------------------------------------------------------------------------------------------
-            s_layer3 = Conv2D(64,(1,1),activation='tanh')(s_layer3)
-            # s_layer3 = MaxPooling2D((2,2))(s_layer3)
-
-            x_layer3 = Conv2D(64,(1,1),activation='relu')(x_layer3)
-            # x_layer3 = AveragePooling2D((2,2))(x_layer3)
-
-            feat_s2_pre = Multiply()([s_layer3,x_layer3])
-            # feat_s2_pre  = Flatten()(feat_s2_pre)
-            #-------------------------------------------------------------------------------------------------------------------------
-            s_layer2 = Conv2D(64,(1,1),activation='tanh')(s_layer2)
-            # s_layer2 = MaxPooling2D((2,2))(s_layer2)
-
-            x_layer2 = Conv2D(64,(1,1),activation='relu')(x_layer2)
-            # x_layer2 = AveragePooling2D((2,2))(x_layer2)
-
-            feat_s3_pre = Multiply()([s_layer2,x_layer2])
-            # feat_s3_pre  = Flatten()(feat_s3_pre)
-            #-------------------------------------------------------------------------------------------------------------------------
-            
-            # Spatial Pyramid Pooling
-            #feat_s1_pre = SpatialPyramidPooling([1, 2, 4],'average')(feat_s1_pre)        
-            #feat_s2_pre = SpatialPyramidPooling([1, 2, 4],'average')(feat_s2_pre)
-            #feat_s3_pre = SpatialPyramidPooling([1, 2, 4],'average')(feat_s3_pre)
-            # feat_s1_pre = GlobalAveragePooling2D()(feat_s1_pre)
-            # feat_s2_pre = GlobalAveragePooling2D()(feat_s2_pre)
-            feat_s3_pre = AveragePooling2D((2,2))(feat_s3_pre) # make sure (8x8x64) feature maps 
-        
-            ssr_G_model = Model(inputs=img_inputs,outputs=[feat_s1_pre,feat_s2_pre,feat_s3_pre], name='ssr_G_model')
-            return ssr_G_model
-
-        ssr_G_model = ssr_G_model_build(img_inputs)
+        ssr_G_model = self.ssr_G_model_build(img_inputs)
         def ssr_feat_S_model_build(num_primcaps, m_dim):
             input_preS = Input((8,8,64))
 
@@ -2122,99 +1477,7 @@ class FSA_net_noS_NetVLAD(BaseFSANet):
         logging.debug("Creating model...")
 
         img_inputs = Input(self._input_shape)
-        def ssr_G_model_build(img_inputs):
-            #-------------------------------------------------------------------------------------------------------------------------
-            x = SeparableConv2D(16,(3,3),padding='same')(img_inputs)
-            x = BatchNormalization(axis=-1)(x)
-            x = Activation('relu')(x)
-            x_layer1 = AveragePooling2D((2,2))(x)
-            x = SeparableConv2D(32,(3,3),padding='same')(x_layer1)
-            x = BatchNormalization(axis=-1)(x)
-            x = Activation('relu')(x)
-            x = SeparableConv2D(32,(3,3),padding='same')(x)
-            x = BatchNormalization(axis=-1)(x)
-            x = Activation('relu')(x)
-            x_layer2 = AveragePooling2D((2,2))(x)
-            x = SeparableConv2D(64,(3,3),padding='same')(x_layer2)
-            x = BatchNormalization(axis=-1)(x)
-            x = Activation('relu')(x)
-            x = SeparableConv2D(64,(3,3),padding='same')(x)
-            x = BatchNormalization(axis=-1)(x)
-            x = Activation('relu')(x)
-            x_layer3 = AveragePooling2D((2,2))(x)
-            x = SeparableConv2D(128,(3,3),padding='same')(x_layer3)
-            x = BatchNormalization(axis=-1)(x)
-            x = Activation('relu')(x)
-            x = SeparableConv2D(128,(3,3),padding='same')(x)
-            x = BatchNormalization(axis=-1)(x)
-            x_layer4 = Activation('relu')(x)
-            #-------------------------------------------------------------------------------------------------------------------------
-            s = SeparableConv2D(16,(3,3),padding='same')(img_inputs)
-            s = BatchNormalization(axis=-1)(s)
-            s = Activation('tanh')(s)
-            s_layer1 = MaxPooling2D((2,2))(s)
-            s = SeparableConv2D(32,(3,3),padding='same')(s_layer1)
-            s = BatchNormalization(axis=-1)(s)
-            s = Activation('tanh')(s)
-            s = SeparableConv2D(32,(3,3),padding='same')(s)
-            s = BatchNormalization(axis=-1)(s)
-            s = Activation('tanh')(s)
-            s_layer2 = MaxPooling2D((2,2))(s)
-            s = SeparableConv2D(64,(3,3),padding='same')(s_layer2)
-            s = BatchNormalization(axis=-1)(s)
-            s = Activation('tanh')(s)
-            s = SeparableConv2D(64,(3,3),padding='same')(s)
-            s = BatchNormalization(axis=-1)(s)
-            s = Activation('tanh')(s)
-            s_layer3 = MaxPooling2D((2,2))(s)
-            s = SeparableConv2D(128,(3,3),padding='same')(s_layer3)
-            s = BatchNormalization(axis=-1)(s)
-            s = Activation('tanh')(s)
-            s = SeparableConv2D(128,(3,3),padding='same')(s)
-            s = BatchNormalization(axis=-1)(s)
-            s_layer4 = Activation('tanh')(s)
-            #-------------------------------------------------------------------------------------------------------------------------
-            
-            s_layer4 = Conv2D(64,(1,1),activation='tanh')(s_layer4)
-            # s_layer4 = MaxPooling2D((2,2))(s_layer4)
-
-            x_layer4 = Conv2D(64,(1,1),activation='relu')(x_layer4)
-            # x_layer4 = AveragePooling2D((2,2))(x_layer4)
-
-            feat_s1_pre = Multiply()([s_layer4,x_layer4])
-            # feat_s1_pre = Flatten()(feat_s1_pre)
-            #-------------------------------------------------------------------------------------------------------------------------
-            s_layer3 = Conv2D(64,(1,1),activation='tanh')(s_layer3)
-            # s_layer3 = MaxPooling2D((2,2))(s_layer3)
-
-            x_layer3 = Conv2D(64,(1,1),activation='relu')(x_layer3)
-            # x_layer3 = AveragePooling2D((2,2))(x_layer3)
-
-            feat_s2_pre = Multiply()([s_layer3,x_layer3])
-            # feat_s2_pre  = Flatten()(feat_s2_pre)
-            #-------------------------------------------------------------------------------------------------------------------------
-            s_layer2 = Conv2D(64,(1,1),activation='tanh')(s_layer2)
-            # s_layer2 = MaxPooling2D((2,2))(s_layer2)
-
-            x_layer2 = Conv2D(64,(1,1),activation='relu')(x_layer2)
-            # x_layer2 = AveragePooling2D((2,2))(x_layer2)
-
-            feat_s3_pre = Multiply()([s_layer2,x_layer2])
-            # feat_s3_pre  = Flatten()(feat_s3_pre)
-            #-------------------------------------------------------------------------------------------------------------------------
-            
-            # Spatial Pyramid Pooling
-            #feat_s1_pre = SpatialPyramidPooling([1, 2, 4],'average')(feat_s1_pre)        
-            #feat_s2_pre = SpatialPyramidPooling([1, 2, 4],'average')(feat_s2_pre)
-            #feat_s3_pre = SpatialPyramidPooling([1, 2, 4],'average')(feat_s3_pre)
-            # feat_s1_pre = GlobalAveragePooling2D()(feat_s1_pre)
-            # feat_s2_pre = GlobalAveragePooling2D()(feat_s2_pre)
-            feat_s3_pre = AveragePooling2D((2,2))(feat_s3_pre) # make sure (8x8x64) feature maps 
-        
-            ssr_G_model = Model(inputs=img_inputs,outputs=[feat_s1_pre,feat_s2_pre,feat_s3_pre], name='ssr_G_model')
-            return ssr_G_model
-
-        ssr_G_model = ssr_G_model_build(img_inputs)
+        ssr_G_model = self.ssr_G_model_build(img_inputs)
         #-------------------------------------------------------------------------------------------------------------------------
         def ssr_S_model_build():
             input_s1_preS = Input((8,8,64))
@@ -2350,99 +1613,7 @@ class FSA_net_NetVLAD_FC(BaseFSANet):
         logging.debug("Creating model...")
 
         img_inputs = Input(self._input_shape)
-        def ssr_G_model_build(img_inputs):
-            #-------------------------------------------------------------------------------------------------------------------------
-            x = SeparableConv2D(16,(3,3),padding='same')(img_inputs)
-            x = BatchNormalization(axis=-1)(x)
-            x = Activation('relu')(x)
-            x_layer1 = AveragePooling2D((2,2))(x)
-            x = SeparableConv2D(32,(3,3),padding='same')(x_layer1)
-            x = BatchNormalization(axis=-1)(x)
-            x = Activation('relu')(x)
-            x = SeparableConv2D(32,(3,3),padding='same')(x)
-            x = BatchNormalization(axis=-1)(x)
-            x = Activation('relu')(x)
-            x_layer2 = AveragePooling2D((2,2))(x)
-            x = SeparableConv2D(64,(3,3),padding='same')(x_layer2)
-            x = BatchNormalization(axis=-1)(x)
-            x = Activation('relu')(x)
-            x = SeparableConv2D(64,(3,3),padding='same')(x)
-            x = BatchNormalization(axis=-1)(x)
-            x = Activation('relu')(x)
-            x_layer3 = AveragePooling2D((2,2))(x)
-            x = SeparableConv2D(128,(3,3),padding='same')(x_layer3)
-            x = BatchNormalization(axis=-1)(x)
-            x = Activation('relu')(x)
-            x = SeparableConv2D(128,(3,3),padding='same')(x)
-            x = BatchNormalization(axis=-1)(x)
-            x_layer4 = Activation('relu')(x)
-            #-------------------------------------------------------------------------------------------------------------------------
-            s = SeparableConv2D(16,(3,3),padding='same')(img_inputs)
-            s = BatchNormalization(axis=-1)(s)
-            s = Activation('tanh')(s)
-            s_layer1 = MaxPooling2D((2,2))(s)
-            s = SeparableConv2D(32,(3,3),padding='same')(s_layer1)
-            s = BatchNormalization(axis=-1)(s)
-            s = Activation('tanh')(s)
-            s = SeparableConv2D(32,(3,3),padding='same')(s)
-            s = BatchNormalization(axis=-1)(s)
-            s = Activation('tanh')(s)
-            s_layer2 = MaxPooling2D((2,2))(s)
-            s = SeparableConv2D(64,(3,3),padding='same')(s_layer2)
-            s = BatchNormalization(axis=-1)(s)
-            s = Activation('tanh')(s)
-            s = SeparableConv2D(64,(3,3),padding='same')(s)
-            s = BatchNormalization(axis=-1)(s)
-            s = Activation('tanh')(s)
-            s_layer3 = MaxPooling2D((2,2))(s)
-            s = SeparableConv2D(128,(3,3),padding='same')(s_layer3)
-            s = BatchNormalization(axis=-1)(s)
-            s = Activation('tanh')(s)
-            s = SeparableConv2D(128,(3,3),padding='same')(s)
-            s = BatchNormalization(axis=-1)(s)
-            s_layer4 = Activation('tanh')(s)
-            #-------------------------------------------------------------------------------------------------------------------------
-            
-            s_layer4 = Conv2D(64,(1,1),activation='tanh')(s_layer4)
-            # s_layer4 = MaxPooling2D((2,2))(s_layer4)
-
-            x_layer4 = Conv2D(64,(1,1),activation='relu')(x_layer4)
-            # x_layer4 = AveragePooling2D((2,2))(x_layer4)
-
-            feat_s1_pre = Multiply()([s_layer4,x_layer4])
-            # feat_s1_pre = Flatten()(feat_s1_pre)
-            #-------------------------------------------------------------------------------------------------------------------------
-            s_layer3 = Conv2D(64,(1,1),activation='tanh')(s_layer3)
-            # s_layer3 = MaxPooling2D((2,2))(s_layer3)
-
-            x_layer3 = Conv2D(64,(1,1),activation='relu')(x_layer3)
-            # x_layer3 = AveragePooling2D((2,2))(x_layer3)
-
-            feat_s2_pre = Multiply()([s_layer3,x_layer3])
-            # feat_s2_pre  = Flatten()(feat_s2_pre)
-            #-------------------------------------------------------------------------------------------------------------------------
-            s_layer2 = Conv2D(64,(1,1),activation='tanh')(s_layer2)
-            # s_layer2 = MaxPooling2D((2,2))(s_layer2)
-
-            x_layer2 = Conv2D(64,(1,1),activation='relu')(x_layer2)
-            # x_layer2 = AveragePooling2D((2,2))(x_layer2)
-
-            feat_s3_pre = Multiply()([s_layer2,x_layer2])
-            # feat_s3_pre  = Flatten()(feat_s3_pre)
-            #-------------------------------------------------------------------------------------------------------------------------
-            
-            # Spatial Pyramid Pooling
-            #feat_s1_pre = SpatialPyramidPooling([1, 2, 4],'average')(feat_s1_pre)        
-            #feat_s2_pre = SpatialPyramidPooling([1, 2, 4],'average')(feat_s2_pre)
-            #feat_s3_pre = SpatialPyramidPooling([1, 2, 4],'average')(feat_s3_pre)
-            # feat_s1_pre = GlobalAveragePooling2D()(feat_s1_pre)
-            # feat_s2_pre = GlobalAveragePooling2D()(feat_s2_pre)
-            feat_s3_pre = AveragePooling2D((2,2))(feat_s3_pre) # make sure (8x8x64) feature maps 
-        
-            ssr_G_model = Model(inputs=img_inputs,outputs=[feat_s1_pre,feat_s2_pre,feat_s3_pre], name='ssr_G_model')
-            return ssr_G_model
-
-        ssr_G_model = ssr_G_model_build(img_inputs)
+        ssr_G_model = self.ssr_G_model_build(img_inputs)
         def ssr_feat_S_model_build(num_primcaps, m_dim):
             input_preS = Input((8,8,64))
 
@@ -2614,99 +1785,7 @@ class FSA_net_Var_NetVLAD_FC(BaseFSANet):
         logging.debug("Creating model...")
 
         img_inputs = Input(self._input_shape)
-        def ssr_G_model_build(img_inputs):
-            #-------------------------------------------------------------------------------------------------------------------------
-            x = SeparableConv2D(16,(3,3),padding='same')(img_inputs)
-            x = BatchNormalization(axis=-1)(x)
-            x = Activation('relu')(x)
-            x_layer1 = AveragePooling2D((2,2))(x)
-            x = SeparableConv2D(32,(3,3),padding='same')(x_layer1)
-            x = BatchNormalization(axis=-1)(x)
-            x = Activation('relu')(x)
-            x = SeparableConv2D(32,(3,3),padding='same')(x)
-            x = BatchNormalization(axis=-1)(x)
-            x = Activation('relu')(x)
-            x_layer2 = AveragePooling2D((2,2))(x)
-            x = SeparableConv2D(64,(3,3),padding='same')(x_layer2)
-            x = BatchNormalization(axis=-1)(x)
-            x = Activation('relu')(x)
-            x = SeparableConv2D(64,(3,3),padding='same')(x)
-            x = BatchNormalization(axis=-1)(x)
-            x = Activation('relu')(x)
-            x_layer3 = AveragePooling2D((2,2))(x)
-            x = SeparableConv2D(128,(3,3),padding='same')(x_layer3)
-            x = BatchNormalization(axis=-1)(x)
-            x = Activation('relu')(x)
-            x = SeparableConv2D(128,(3,3),padding='same')(x)
-            x = BatchNormalization(axis=-1)(x)
-            x_layer4 = Activation('relu')(x)
-            #-------------------------------------------------------------------------------------------------------------------------
-            s = SeparableConv2D(16,(3,3),padding='same')(img_inputs)
-            s = BatchNormalization(axis=-1)(s)
-            s = Activation('tanh')(s)
-            s_layer1 = MaxPooling2D((2,2))(s)
-            s = SeparableConv2D(32,(3,3),padding='same')(s_layer1)
-            s = BatchNormalization(axis=-1)(s)
-            s = Activation('tanh')(s)
-            s = SeparableConv2D(32,(3,3),padding='same')(s)
-            s = BatchNormalization(axis=-1)(s)
-            s = Activation('tanh')(s)
-            s_layer2 = MaxPooling2D((2,2))(s)
-            s = SeparableConv2D(64,(3,3),padding='same')(s_layer2)
-            s = BatchNormalization(axis=-1)(s)
-            s = Activation('tanh')(s)
-            s = SeparableConv2D(64,(3,3),padding='same')(s)
-            s = BatchNormalization(axis=-1)(s)
-            s = Activation('tanh')(s)
-            s_layer3 = MaxPooling2D((2,2))(s)
-            s = SeparableConv2D(128,(3,3),padding='same')(s_layer3)
-            s = BatchNormalization(axis=-1)(s)
-            s = Activation('tanh')(s)
-            s = SeparableConv2D(128,(3,3),padding='same')(s)
-            s = BatchNormalization(axis=-1)(s)
-            s_layer4 = Activation('tanh')(s)
-            #-------------------------------------------------------------------------------------------------------------------------
-            
-            s_layer4 = Conv2D(64,(1,1),activation='tanh')(s_layer4)
-            # s_layer4 = MaxPooling2D((2,2))(s_layer4)
-
-            x_layer4 = Conv2D(64,(1,1),activation='relu')(x_layer4)
-            # x_layer4 = AveragePooling2D((2,2))(x_layer4)
-
-            feat_s1_pre = Multiply()([s_layer4,x_layer4])
-            # feat_s1_pre = Flatten()(feat_s1_pre)
-            #-------------------------------------------------------------------------------------------------------------------------
-            s_layer3 = Conv2D(64,(1,1),activation='tanh')(s_layer3)
-            # s_layer3 = MaxPooling2D((2,2))(s_layer3)
-
-            x_layer3 = Conv2D(64,(1,1),activation='relu')(x_layer3)
-            # x_layer3 = AveragePooling2D((2,2))(x_layer3)
-
-            feat_s2_pre = Multiply()([s_layer3,x_layer3])
-            # feat_s2_pre  = Flatten()(feat_s2_pre)
-            #-------------------------------------------------------------------------------------------------------------------------
-            s_layer2 = Conv2D(64,(1,1),activation='tanh')(s_layer2)
-            # s_layer2 = MaxPooling2D((2,2))(s_layer2)
-
-            x_layer2 = Conv2D(64,(1,1),activation='relu')(x_layer2)
-            # x_layer2 = AveragePooling2D((2,2))(x_layer2)
-
-            feat_s3_pre = Multiply()([s_layer2,x_layer2])
-            # feat_s3_pre  = Flatten()(feat_s3_pre)
-            #-------------------------------------------------------------------------------------------------------------------------
-            
-            # Spatial Pyramid Pooling
-            #feat_s1_pre = SpatialPyramidPooling([1, 2, 4],'average')(feat_s1_pre)        
-            #feat_s2_pre = SpatialPyramidPooling([1, 2, 4],'average')(feat_s2_pre)
-            #feat_s3_pre = SpatialPyramidPooling([1, 2, 4],'average')(feat_s3_pre)
-            # feat_s1_pre = GlobalAveragePooling2D()(feat_s1_pre)
-            # feat_s2_pre = GlobalAveragePooling2D()(feat_s2_pre)
-            feat_s3_pre = AveragePooling2D((2,2))(feat_s3_pre) # make sure (8x8x64) feature maps 
-        
-            ssr_G_model = Model(inputs=img_inputs,outputs=[feat_s1_pre,feat_s2_pre,feat_s3_pre], name='ssr_G_model')
-            return ssr_G_model
-
-        ssr_G_model = ssr_G_model_build(img_inputs)
+        ssr_G_model = self.ssr_G_model_build(img_inputs)
         def ssr_feat_S_model_build(num_primcaps, m_dim):
             input_preS = Input((8,8,64))
 
@@ -2882,99 +1961,7 @@ class FSA_net_noS_NetVLAD_FC(BaseFSANet):
         logging.debug("Creating model...")
 
         img_inputs = Input(self._input_shape)
-        def ssr_G_model_build(img_inputs):
-            #-------------------------------------------------------------------------------------------------------------------------
-            x = SeparableConv2D(16,(3,3),padding='same')(img_inputs)
-            x = BatchNormalization(axis=-1)(x)
-            x = Activation('relu')(x)
-            x_layer1 = AveragePooling2D((2,2))(x)
-            x = SeparableConv2D(32,(3,3),padding='same')(x_layer1)
-            x = BatchNormalization(axis=-1)(x)
-            x = Activation('relu')(x)
-            x = SeparableConv2D(32,(3,3),padding='same')(x)
-            x = BatchNormalization(axis=-1)(x)
-            x = Activation('relu')(x)
-            x_layer2 = AveragePooling2D((2,2))(x)
-            x = SeparableConv2D(64,(3,3),padding='same')(x_layer2)
-            x = BatchNormalization(axis=-1)(x)
-            x = Activation('relu')(x)
-            x = SeparableConv2D(64,(3,3),padding='same')(x)
-            x = BatchNormalization(axis=-1)(x)
-            x = Activation('relu')(x)
-            x_layer3 = AveragePooling2D((2,2))(x)
-            x = SeparableConv2D(128,(3,3),padding='same')(x_layer3)
-            x = BatchNormalization(axis=-1)(x)
-            x = Activation('relu')(x)
-            x = SeparableConv2D(128,(3,3),padding='same')(x)
-            x = BatchNormalization(axis=-1)(x)
-            x_layer4 = Activation('relu')(x)
-            #-------------------------------------------------------------------------------------------------------------------------
-            s = SeparableConv2D(16,(3,3),padding='same')(img_inputs)
-            s = BatchNormalization(axis=-1)(s)
-            s = Activation('tanh')(s)
-            s_layer1 = MaxPooling2D((2,2))(s)
-            s = SeparableConv2D(32,(3,3),padding='same')(s_layer1)
-            s = BatchNormalization(axis=-1)(s)
-            s = Activation('tanh')(s)
-            s = SeparableConv2D(32,(3,3),padding='same')(s)
-            s = BatchNormalization(axis=-1)(s)
-            s = Activation('tanh')(s)
-            s_layer2 = MaxPooling2D((2,2))(s)
-            s = SeparableConv2D(64,(3,3),padding='same')(s_layer2)
-            s = BatchNormalization(axis=-1)(s)
-            s = Activation('tanh')(s)
-            s = SeparableConv2D(64,(3,3),padding='same')(s)
-            s = BatchNormalization(axis=-1)(s)
-            s = Activation('tanh')(s)
-            s_layer3 = MaxPooling2D((2,2))(s)
-            s = SeparableConv2D(128,(3,3),padding='same')(s_layer3)
-            s = BatchNormalization(axis=-1)(s)
-            s = Activation('tanh')(s)
-            s = SeparableConv2D(128,(3,3),padding='same')(s)
-            s = BatchNormalization(axis=-1)(s)
-            s_layer4 = Activation('tanh')(s)
-            #-------------------------------------------------------------------------------------------------------------------------
-            
-            s_layer4 = Conv2D(64,(1,1),activation='tanh')(s_layer4)
-            # s_layer4 = MaxPooling2D((2,2))(s_layer4)
-
-            x_layer4 = Conv2D(64,(1,1),activation='relu')(x_layer4)
-            # x_layer4 = AveragePooling2D((2,2))(x_layer4)
-
-            feat_s1_pre = Multiply()([s_layer4,x_layer4])
-            # feat_s1_pre = Flatten()(feat_s1_pre)
-            #-------------------------------------------------------------------------------------------------------------------------
-            s_layer3 = Conv2D(64,(1,1),activation='tanh')(s_layer3)
-            # s_layer3 = MaxPooling2D((2,2))(s_layer3)
-
-            x_layer3 = Conv2D(64,(1,1),activation='relu')(x_layer3)
-            # x_layer3 = AveragePooling2D((2,2))(x_layer3)
-
-            feat_s2_pre = Multiply()([s_layer3,x_layer3])
-            # feat_s2_pre  = Flatten()(feat_s2_pre)
-            #-------------------------------------------------------------------------------------------------------------------------
-            s_layer2 = Conv2D(64,(1,1),activation='tanh')(s_layer2)
-            # s_layer2 = MaxPooling2D((2,2))(s_layer2)
-
-            x_layer2 = Conv2D(64,(1,1),activation='relu')(x_layer2)
-            # x_layer2 = AveragePooling2D((2,2))(x_layer2)
-
-            feat_s3_pre = Multiply()([s_layer2,x_layer2])
-            # feat_s3_pre  = Flatten()(feat_s3_pre)
-            #-------------------------------------------------------------------------------------------------------------------------
-            
-            # Spatial Pyramid Pooling
-            #feat_s1_pre = SpatialPyramidPooling([1, 2, 4],'average')(feat_s1_pre)        
-            #feat_s2_pre = SpatialPyramidPooling([1, 2, 4],'average')(feat_s2_pre)
-            #feat_s3_pre = SpatialPyramidPooling([1, 2, 4],'average')(feat_s3_pre)
-            # feat_s1_pre = GlobalAveragePooling2D()(feat_s1_pre)
-            # feat_s2_pre = GlobalAveragePooling2D()(feat_s2_pre)
-            feat_s3_pre = AveragePooling2D((2,2))(feat_s3_pre) # make sure (8x8x64) feature maps 
-        
-            ssr_G_model = Model(inputs=img_inputs,outputs=[feat_s1_pre,feat_s2_pre,feat_s3_pre], name='ssr_G_model')
-            return ssr_G_model
-
-        ssr_G_model = ssr_G_model_build(img_inputs)
+        ssr_G_model = self.ssr_G_model_build(img_inputs)
         #-------------------------------------------------------------------------------------------------------------------------
         def ssr_S_model_build():
             input_s1_preS = Input((8,8,64))
@@ -3108,99 +2095,7 @@ class FSA_net_Metric(BaseFSANet):
         logging.debug("Creating model...")
 
         img_inputs = Input(self._input_shape)
-        def ssr_G_model_build(img_inputs):
-            #-------------------------------------------------------------------------------------------------------------------------
-            x = SeparableConv2D(16,(3,3),padding='same')(img_inputs)
-            x = BatchNormalization(axis=-1)(x)
-            x = Activation('relu')(x)
-            x_layer1 = AveragePooling2D((2,2))(x)
-            x = SeparableConv2D(32,(3,3),padding='same')(x_layer1)
-            x = BatchNormalization(axis=-1)(x)
-            x = Activation('relu')(x)
-            x = SeparableConv2D(32,(3,3),padding='same')(x)
-            x = BatchNormalization(axis=-1)(x)
-            x = Activation('relu')(x)
-            x_layer2 = AveragePooling2D((2,2))(x)
-            x = SeparableConv2D(64,(3,3),padding='same')(x_layer2)
-            x = BatchNormalization(axis=-1)(x)
-            x = Activation('relu')(x)
-            x = SeparableConv2D(64,(3,3),padding='same')(x)
-            x = BatchNormalization(axis=-1)(x)
-            x = Activation('relu')(x)
-            x_layer3 = AveragePooling2D((2,2))(x)
-            x = SeparableConv2D(128,(3,3),padding='same')(x_layer3)
-            x = BatchNormalization(axis=-1)(x)
-            x = Activation('relu')(x)
-            x = SeparableConv2D(128,(3,3),padding='same')(x)
-            x = BatchNormalization(axis=-1)(x)
-            x_layer4 = Activation('relu')(x)
-            #-------------------------------------------------------------------------------------------------------------------------
-            s = SeparableConv2D(16,(3,3),padding='same')(img_inputs)
-            s = BatchNormalization(axis=-1)(s)
-            s = Activation('tanh')(s)
-            s_layer1 = MaxPooling2D((2,2))(s)
-            s = SeparableConv2D(32,(3,3),padding='same')(s_layer1)
-            s = BatchNormalization(axis=-1)(s)
-            s = Activation('tanh')(s)
-            s = SeparableConv2D(32,(3,3),padding='same')(s)
-            s = BatchNormalization(axis=-1)(s)
-            s = Activation('tanh')(s)
-            s_layer2 = MaxPooling2D((2,2))(s)
-            s = SeparableConv2D(64,(3,3),padding='same')(s_layer2)
-            s = BatchNormalization(axis=-1)(s)
-            s = Activation('tanh')(s)
-            s = SeparableConv2D(64,(3,3),padding='same')(s)
-            s = BatchNormalization(axis=-1)(s)
-            s = Activation('tanh')(s)
-            s_layer3 = MaxPooling2D((2,2))(s)
-            s = SeparableConv2D(128,(3,3),padding='same')(s_layer3)
-            s = BatchNormalization(axis=-1)(s)
-            s = Activation('tanh')(s)
-            s = SeparableConv2D(128,(3,3),padding='same')(s)
-            s = BatchNormalization(axis=-1)(s)
-            s_layer4 = Activation('tanh')(s)
-            #-------------------------------------------------------------------------------------------------------------------------
-            
-            s_layer4 = Conv2D(64,(1,1),activation='tanh')(s_layer4)
-            # s_layer4 = MaxPooling2D((2,2))(s_layer4)
-
-            x_layer4 = Conv2D(64,(1,1),activation='relu')(x_layer4)
-            # x_layer4 = AveragePooling2D((2,2))(x_layer4)
-
-            feat_s1_pre = Multiply()([s_layer4,x_layer4])
-            # feat_s1_pre = Flatten()(feat_s1_pre)
-            #-------------------------------------------------------------------------------------------------------------------------
-            s_layer3 = Conv2D(64,(1,1),activation='tanh')(s_layer3)
-            # s_layer3 = MaxPooling2D((2,2))(s_layer3)
-
-            x_layer3 = Conv2D(64,(1,1),activation='relu')(x_layer3)
-            # x_layer3 = AveragePooling2D((2,2))(x_layer3)
-
-            feat_s2_pre = Multiply()([s_layer3,x_layer3])
-            # feat_s2_pre  = Flatten()(feat_s2_pre)
-            #-------------------------------------------------------------------------------------------------------------------------
-            s_layer2 = Conv2D(64,(1,1),activation='tanh')(s_layer2)
-            # s_layer2 = MaxPooling2D((2,2))(s_layer2)
-
-            x_layer2 = Conv2D(64,(1,1),activation='relu')(x_layer2)
-            # x_layer2 = AveragePooling2D((2,2))(x_layer2)
-
-            feat_s3_pre = Multiply()([s_layer2,x_layer2])
-            # feat_s3_pre  = Flatten()(feat_s3_pre)
-            #-------------------------------------------------------------------------------------------------------------------------
-            
-            # Spatial Pyramid Pooling
-            #feat_s1_pre = SpatialPyramidPooling([1, 2, 4],'average')(feat_s1_pre)        
-            #feat_s2_pre = SpatialPyramidPooling([1, 2, 4],'average')(feat_s2_pre)
-            #feat_s3_pre = SpatialPyramidPooling([1, 2, 4],'average')(feat_s3_pre)
-            # feat_s1_pre = GlobalAveragePooling2D()(feat_s1_pre)
-            # feat_s2_pre = GlobalAveragePooling2D()(feat_s2_pre)
-            feat_s3_pre = AveragePooling2D((2,2))(feat_s3_pre) # make sure (8x8x64) feature maps 
-        
-            ssr_G_model = Model(inputs=img_inputs,outputs=[feat_s1_pre,feat_s2_pre,feat_s3_pre], name='ssr_G_model')
-            return ssr_G_model
-
-        ssr_G_model = ssr_G_model_build(img_inputs)
+        ssr_G_model = self.ssr_G_model_build(img_inputs)
         def ssr_feat_S_model_build(num_primcaps, m_dim):
             input_preS = Input((8,8,64))
 
@@ -3376,99 +2271,7 @@ class FSA_net_Var_Metric(BaseFSANet):
         logging.debug("Creating model...")
 
         img_inputs = Input(self._input_shape)
-        def ssr_G_model_build(img_inputs):
-            #-------------------------------------------------------------------------------------------------------------------------
-            x = SeparableConv2D(16,(3,3),padding='same')(img_inputs)
-            x = BatchNormalization(axis=-1)(x)
-            x = Activation('relu')(x)
-            x_layer1 = AveragePooling2D((2,2))(x)
-            x = SeparableConv2D(32,(3,3),padding='same')(x_layer1)
-            x = BatchNormalization(axis=-1)(x)
-            x = Activation('relu')(x)
-            x = SeparableConv2D(32,(3,3),padding='same')(x)
-            x = BatchNormalization(axis=-1)(x)
-            x = Activation('relu')(x)
-            x_layer2 = AveragePooling2D((2,2))(x)
-            x = SeparableConv2D(64,(3,3),padding='same')(x_layer2)
-            x = BatchNormalization(axis=-1)(x)
-            x = Activation('relu')(x)
-            x = SeparableConv2D(64,(3,3),padding='same')(x)
-            x = BatchNormalization(axis=-1)(x)
-            x = Activation('relu')(x)
-            x_layer3 = AveragePooling2D((2,2))(x)
-            x = SeparableConv2D(128,(3,3),padding='same')(x_layer3)
-            x = BatchNormalization(axis=-1)(x)
-            x = Activation('relu')(x)
-            x = SeparableConv2D(128,(3,3),padding='same')(x)
-            x = BatchNormalization(axis=-1)(x)
-            x_layer4 = Activation('relu')(x)
-            #-------------------------------------------------------------------------------------------------------------------------
-            s = SeparableConv2D(16,(3,3),padding='same')(img_inputs)
-            s = BatchNormalization(axis=-1)(s)
-            s = Activation('tanh')(s)
-            s_layer1 = MaxPooling2D((2,2))(s)
-            s = SeparableConv2D(32,(3,3),padding='same')(s_layer1)
-            s = BatchNormalization(axis=-1)(s)
-            s = Activation('tanh')(s)
-            s = SeparableConv2D(32,(3,3),padding='same')(s)
-            s = BatchNormalization(axis=-1)(s)
-            s = Activation('tanh')(s)
-            s_layer2 = MaxPooling2D((2,2))(s)
-            s = SeparableConv2D(64,(3,3),padding='same')(s_layer2)
-            s = BatchNormalization(axis=-1)(s)
-            s = Activation('tanh')(s)
-            s = SeparableConv2D(64,(3,3),padding='same')(s)
-            s = BatchNormalization(axis=-1)(s)
-            s = Activation('tanh')(s)
-            s_layer3 = MaxPooling2D((2,2))(s)
-            s = SeparableConv2D(128,(3,3),padding='same')(s_layer3)
-            s = BatchNormalization(axis=-1)(s)
-            s = Activation('tanh')(s)
-            s = SeparableConv2D(128,(3,3),padding='same')(s)
-            s = BatchNormalization(axis=-1)(s)
-            s_layer4 = Activation('tanh')(s)
-            #-------------------------------------------------------------------------------------------------------------------------
-            
-            s_layer4 = Conv2D(64,(1,1),activation='tanh')(s_layer4)
-            # s_layer4 = MaxPooling2D((2,2))(s_layer4)
-
-            x_layer4 = Conv2D(64,(1,1),activation='relu')(x_layer4)
-            # x_layer4 = AveragePooling2D((2,2))(x_layer4)
-
-            feat_s1_pre = Multiply()([s_layer4,x_layer4])
-            # feat_s1_pre = Flatten()(feat_s1_pre)
-            #-------------------------------------------------------------------------------------------------------------------------
-            s_layer3 = Conv2D(64,(1,1),activation='tanh')(s_layer3)
-            # s_layer3 = MaxPooling2D((2,2))(s_layer3)
-
-            x_layer3 = Conv2D(64,(1,1),activation='relu')(x_layer3)
-            # x_layer3 = AveragePooling2D((2,2))(x_layer3)
-
-            feat_s2_pre = Multiply()([s_layer3,x_layer3])
-            # feat_s2_pre  = Flatten()(feat_s2_pre)
-            #-------------------------------------------------------------------------------------------------------------------------
-            s_layer2 = Conv2D(64,(1,1),activation='tanh')(s_layer2)
-            # s_layer2 = MaxPooling2D((2,2))(s_layer2)
-
-            x_layer2 = Conv2D(64,(1,1),activation='relu')(x_layer2)
-            # x_layer2 = AveragePooling2D((2,2))(x_layer2)
-
-            feat_s3_pre = Multiply()([s_layer2,x_layer2])
-            # feat_s3_pre  = Flatten()(feat_s3_pre)
-            #-------------------------------------------------------------------------------------------------------------------------
-            
-            # Spatial Pyramid Pooling
-            #feat_s1_pre = SpatialPyramidPooling([1, 2, 4],'average')(feat_s1_pre)        
-            #feat_s2_pre = SpatialPyramidPooling([1, 2, 4],'average')(feat_s2_pre)
-            #feat_s3_pre = SpatialPyramidPooling([1, 2, 4],'average')(feat_s3_pre)
-            # feat_s1_pre = GlobalAveragePooling2D()(feat_s1_pre)
-            # feat_s2_pre = GlobalAveragePooling2D()(feat_s2_pre)
-            feat_s3_pre = AveragePooling2D((2,2))(feat_s3_pre) # make sure (8x8x64) feature maps 
-        
-            ssr_G_model = Model(inputs=img_inputs,outputs=[feat_s1_pre,feat_s2_pre,feat_s3_pre], name='ssr_G_model')
-            return ssr_G_model
-
-        ssr_G_model = ssr_G_model_build(img_inputs)
+        ssr_G_model = self.ssr_G_model_build(img_inputs)
         def ssr_feat_S_model_build(num_primcaps, m_dim):
             input_preS = Input((8,8,64))
 
@@ -3649,99 +2452,7 @@ class FSA_net_noS_Metric(BaseFSANet):
         logging.debug("Creating model...")
 
         img_inputs = Input(self._input_shape)
-        def ssr_G_model_build(img_inputs):
-            #-------------------------------------------------------------------------------------------------------------------------
-            x = SeparableConv2D(16,(3,3),padding='same')(img_inputs)
-            x = BatchNormalization(axis=-1)(x)
-            x = Activation('relu')(x)
-            x_layer1 = AveragePooling2D((2,2))(x)
-            x = SeparableConv2D(32,(3,3),padding='same')(x_layer1)
-            x = BatchNormalization(axis=-1)(x)
-            x = Activation('relu')(x)
-            x = SeparableConv2D(32,(3,3),padding='same')(x)
-            x = BatchNormalization(axis=-1)(x)
-            x = Activation('relu')(x)
-            x_layer2 = AveragePooling2D((2,2))(x)
-            x = SeparableConv2D(64,(3,3),padding='same')(x_layer2)
-            x = BatchNormalization(axis=-1)(x)
-            x = Activation('relu')(x)
-            x = SeparableConv2D(64,(3,3),padding='same')(x)
-            x = BatchNormalization(axis=-1)(x)
-            x = Activation('relu')(x)
-            x_layer3 = AveragePooling2D((2,2))(x)
-            x = SeparableConv2D(128,(3,3),padding='same')(x_layer3)
-            x = BatchNormalization(axis=-1)(x)
-            x = Activation('relu')(x)
-            x = SeparableConv2D(128,(3,3),padding='same')(x)
-            x = BatchNormalization(axis=-1)(x)
-            x_layer4 = Activation('relu')(x)
-            #-------------------------------------------------------------------------------------------------------------------------
-            s = SeparableConv2D(16,(3,3),padding='same')(img_inputs)
-            s = BatchNormalization(axis=-1)(s)
-            s = Activation('tanh')(s)
-            s_layer1 = MaxPooling2D((2,2))(s)
-            s = SeparableConv2D(32,(3,3),padding='same')(s_layer1)
-            s = BatchNormalization(axis=-1)(s)
-            s = Activation('tanh')(s)
-            s = SeparableConv2D(32,(3,3),padding='same')(s)
-            s = BatchNormalization(axis=-1)(s)
-            s = Activation('tanh')(s)
-            s_layer2 = MaxPooling2D((2,2))(s)
-            s = SeparableConv2D(64,(3,3),padding='same')(s_layer2)
-            s = BatchNormalization(axis=-1)(s)
-            s = Activation('tanh')(s)
-            s = SeparableConv2D(64,(3,3),padding='same')(s)
-            s = BatchNormalization(axis=-1)(s)
-            s = Activation('tanh')(s)
-            s_layer3 = MaxPooling2D((2,2))(s)
-            s = SeparableConv2D(128,(3,3),padding='same')(s_layer3)
-            s = BatchNormalization(axis=-1)(s)
-            s = Activation('tanh')(s)
-            s = SeparableConv2D(128,(3,3),padding='same')(s)
-            s = BatchNormalization(axis=-1)(s)
-            s_layer4 = Activation('tanh')(s)
-            #-------------------------------------------------------------------------------------------------------------------------
-            
-            s_layer4 = Conv2D(64,(1,1),activation='tanh')(s_layer4)
-            # s_layer4 = MaxPooling2D((2,2))(s_layer4)
-
-            x_layer4 = Conv2D(64,(1,1),activation='relu')(x_layer4)
-            # x_layer4 = AveragePooling2D((2,2))(x_layer4)
-
-            feat_s1_pre = Multiply()([s_layer4,x_layer4])
-            # feat_s1_pre = Flatten()(feat_s1_pre)
-            #-------------------------------------------------------------------------------------------------------------------------
-            s_layer3 = Conv2D(64,(1,1),activation='tanh')(s_layer3)
-            # s_layer3 = MaxPooling2D((2,2))(s_layer3)
-
-            x_layer3 = Conv2D(64,(1,1),activation='relu')(x_layer3)
-            # x_layer3 = AveragePooling2D((2,2))(x_layer3)
-
-            feat_s2_pre = Multiply()([s_layer3,x_layer3])
-            # feat_s2_pre  = Flatten()(feat_s2_pre)
-            #-------------------------------------------------------------------------------------------------------------------------
-            s_layer2 = Conv2D(64,(1,1),activation='tanh')(s_layer2)
-            # s_layer2 = MaxPooling2D((2,2))(s_layer2)
-
-            x_layer2 = Conv2D(64,(1,1),activation='relu')(x_layer2)
-            # x_layer2 = AveragePooling2D((2,2))(x_layer2)
-
-            feat_s3_pre = Multiply()([s_layer2,x_layer2])
-            # feat_s3_pre  = Flatten()(feat_s3_pre)
-            #-------------------------------------------------------------------------------------------------------------------------
-            
-            # Spatial Pyramid Pooling
-            #feat_s1_pre = SpatialPyramidPooling([1, 2, 4],'average')(feat_s1_pre)        
-            #feat_s2_pre = SpatialPyramidPooling([1, 2, 4],'average')(feat_s2_pre)
-            #feat_s3_pre = SpatialPyramidPooling([1, 2, 4],'average')(feat_s3_pre)
-            # feat_s1_pre = GlobalAveragePooling2D()(feat_s1_pre)
-            # feat_s2_pre = GlobalAveragePooling2D()(feat_s2_pre)
-            feat_s3_pre = AveragePooling2D((2,2))(feat_s3_pre) # make sure (8x8x64) feature maps 
-        
-            ssr_G_model = Model(inputs=img_inputs,outputs=[feat_s1_pre,feat_s2_pre,feat_s3_pre], name='ssr_G_model')
-            return ssr_G_model
-
-        ssr_G_model = ssr_G_model_build(img_inputs)
+        ssr_G_model = self.ssr_G_model_build(img_inputs)
         #-------------------------------------------------------------------------------------------------------------------------
         def ssr_S_model_build():
             input_s1_preS = Input((8,8,64))
