@@ -171,6 +171,82 @@ class BaseFSANet(object):
         
         return pred
 
+    def ssr_F_model_build(self, feat_dim, name_F):
+        input_s1_pre = Input((feat_dim,))
+        input_s2_pre = Input((feat_dim,))
+        input_s3_pre = Input((feat_dim,))
+
+        feat_delta_s1 = Lambda(lambda x: x[:,0:4])(input_s1_pre)
+        delta_s1 = Dense(self.num_classes,activation='tanh',name='delta_s1')(feat_delta_s1)
+
+        feat_local_s1 = Lambda(lambda x: x[:,4:8])(input_s1_pre)
+        local_s1 = Dense(units=self.num_classes, activation='tanh', name='local_delta_stage1')(feat_local_s1)
+
+        feat_pred_s1 = Lambda(lambda x: x[:,8:16])(input_s1_pre)
+        feat_pred_s1 = Dense(self.stage_num[0]*self.num_classes,activation='relu')(feat_pred_s1) 
+        pred_s1 = Reshape((self.num_classes,self.stage_num[0]))(feat_pred_s1)
+        
+
+        feat_delta_s2 = Lambda(lambda x: x[:,0:4])(input_s2_pre)
+        delta_s2 = Dense(self.num_classes,activation='tanh',name='delta_s2')(feat_delta_s2)
+
+        feat_local_s2 = Lambda(lambda x: x[:,4:8])(input_s2_pre)
+        local_s2 = Dense(units=self.num_classes, activation='tanh', name='local_delta_stage2')(feat_local_s2)
+
+        feat_pred_s2 = Lambda(lambda x: x[:,8:16])(input_s2_pre)
+        feat_pred_s2 = Dense(self.stage_num[1]*self.num_classes,activation='relu')(feat_pred_s2) 
+        pred_s2 = Reshape((self.num_classes,self.stage_num[1]))(feat_pred_s2)
+        
+
+        feat_delta_s3 = Lambda(lambda x: x[:,0:4])(input_s3_pre)
+        delta_s3 = Dense(self.num_classes,activation='tanh',name='delta_s3')(feat_delta_s3)
+
+        feat_local_s3 = Lambda(lambda x: x[:,4:8])(input_s3_pre)
+        local_s3 = Dense(units=self.num_classes, activation='tanh', name='local_delta_stage3')(feat_local_s3)
+
+        feat_pred_s3 = Lambda(lambda x: x[:,8:16])(input_s3_pre)
+        feat_pred_s3 = Dense(self.stage_num[2]*self.num_classes,activation='relu')(feat_pred_s3) 
+        pred_s3 = Reshape((self.num_classes,self.stage_num[2]))(feat_pred_s3)
+    
+        ssr_F_model = Model(inputs=[input_s1_pre,input_s2_pre,input_s3_pre],outputs=[pred_s1,pred_s2,pred_s3,delta_s1,delta_s2,delta_s3,local_s1,local_s2,local_s3], name=name_F)
+        return ssr_F_model
+
+    def ssr_FC_model_build(self, feat_dim, name_F):
+        input_s1_pre = Input((feat_dim,))
+        input_s2_pre = Input((feat_dim,))
+        input_s3_pre = Input((feat_dim,))
+
+        feat_delta_s1 = Dense(2*self.num_classes,activation='tanh')(input_s1_pre)
+        delta_s1 = Dense(self.num_classes,activation='tanh',name='delta_s1')(feat_delta_s1)
+
+        feat_local_s1 = Dense(2*self.num_classes,activation='tanh')(input_s1_pre)
+        local_s1 = Dense(units=self.num_classes, activation='tanh', name='local_delta_stage1')(feat_local_s1)
+
+        feat_pred_s1 = Dense(self.stage_num[0]*self.num_classes,activation='relu')(input_s1_pre) 
+        pred_s1 = Reshape((self.num_classes,self.stage_num[0]))(feat_pred_s1)
+        
+
+        feat_delta_s2 = Dense(2*self.num_classes,activation='tanh')(input_s2_pre)
+        delta_s2 = Dense(self.num_classes,activation='tanh',name='delta_s2')(feat_delta_s2)
+
+        feat_local_s2 = Dense(2*self.num_classes,activation='tanh')(input_s2_pre)
+        local_s2 = Dense(units=self.num_classes, activation='tanh', name='local_delta_stage2')(feat_local_s2)
+
+        feat_pred_s2 = Dense(self.stage_num[1]*self.num_classes,activation='relu')(input_s2_pre) 
+        pred_s2 = Reshape((self.num_classes,self.stage_num[1]))(feat_pred_s2)
+
+        feat_delta_s3 = Dense(2*self.num_classes,activation='tanh')(input_s3_pre)
+        delta_s3 = Dense(self.num_classes,activation='tanh',name='delta_s3')(feat_delta_s3)
+
+        feat_local_s3 = Dense(2*self.num_classes,activation='tanh')(input_s3_pre)
+        local_s3 = Dense(units=self.num_classes, activation='tanh', name='local_delta_stage3')(feat_local_s3)
+
+        feat_pred_s3 = Dense(self.stage_num[2]*self.num_classes,activation='relu')(input_s3_pre) 
+        pred_s3 = Reshape((self.num_classes,self.stage_num[2]))(feat_pred_s3)
+    
+        ssr_F_model = Model(inputs=[input_s1_pre,input_s2_pre,input_s3_pre],outputs=[pred_s1,pred_s2,pred_s3,delta_s1,delta_s2,delta_s3,local_s1,local_s2,local_s3], name=name_F)
+        return ssr_F_model
+
 class BaseCapsuleFSANet(BaseFSANet):
     def __init__(self, image_size,num_classes,stage_num,lambda_d, S_set):
         super(BaseCapsuleFSANet, self).__init__(image_size,num_classes,stage_num,lambda_d, S_set) 
@@ -318,51 +394,8 @@ class FSA_net_Capsule(BaseCapsuleFSANet):
         #-------------------------------------------------------------------------------------------------------------------------       
         ssr_Cap_model = self.ssr_Cap_model_build((self.num_primcaps,64))
         #-------------------------------------------------------------------------------------------------------------------------
-        def ssr_F_model_build(feat_dim, name_F):
-            input_s1_pre = Input((feat_dim,))
-            input_s2_pre = Input((feat_dim,))
-            input_s3_pre = Input((feat_dim,))
-
-            feat_delta_s1 = Lambda(lambda x: x[:,0:4])(input_s1_pre)
-            delta_s1 = Dense(self.num_classes,activation='tanh',name='delta_s1')(feat_delta_s1)
-
-            feat_local_s1 = Lambda(lambda x: x[:,4:8])(input_s1_pre)
-            local_s1 = Dense(units=self.num_classes, activation='tanh', name='local_delta_stage1')(feat_local_s1)
-
-            feat_pred_s1 = Lambda(lambda x: x[:,8:16])(input_s1_pre)
-            feat_pred_s1 = Dense(self.stage_num[0]*self.num_classes,activation='relu')(feat_pred_s1) 
-            pred_s1 = Reshape((self.num_classes,self.stage_num[0]))(feat_pred_s1)
-            
-
-            feat_delta_s2 = Lambda(lambda x: x[:,0:4])(input_s2_pre)
-            delta_s2 = Dense(self.num_classes,activation='tanh',name='delta_s2')(feat_delta_s2)
-
-            feat_local_s2 = Lambda(lambda x: x[:,4:8])(input_s2_pre)
-            local_s2 = Dense(units=self.num_classes, activation='tanh', name='local_delta_stage2')(feat_local_s2)
-
-            feat_pred_s2 = Lambda(lambda x: x[:,8:16])(input_s2_pre)
-            feat_pred_s2 = Dense(self.stage_num[1]*self.num_classes,activation='relu')(feat_pred_s2) 
-            pred_s2 = Reshape((self.num_classes,self.stage_num[1]))(feat_pred_s2)
-            
-
-            feat_delta_s3 = Lambda(lambda x: x[:,0:4])(input_s3_pre)
-            delta_s3 = Dense(self.num_classes,activation='tanh',name='delta_s3')(feat_delta_s3)
-
-            feat_local_s3 = Lambda(lambda x: x[:,4:8])(input_s3_pre)
-            local_s3 = Dense(units=self.num_classes, activation='tanh', name='local_delta_stage3')(feat_local_s3)
-
-            feat_pred_s3 = Lambda(lambda x: x[:,8:16])(input_s3_pre)
-            feat_pred_s3 = Dense(self.stage_num[2]*self.num_classes,activation='relu')(feat_pred_s3) 
-            pred_s3 = Reshape((self.num_classes,self.stage_num[2]))(feat_pred_s3)
-        
-            ssr_F_model = Model(inputs=[input_s1_pre,input_s2_pre,input_s3_pre],outputs=[pred_s1,pred_s2,pred_s3,delta_s1,delta_s2,delta_s3,local_s1,local_s2,local_s3], name=name_F)
-            return ssr_F_model
-        
-        #ssr_F_model = ssr_F_model_build(21*64,'ssr_F_model')
-        # ssr_F_Cap_model = ssr_F_model_build(int(self.dim_capsule/3)*self.num_capsule,'ssr_F_model_Cap')
-        ssr_F_Cap_model = ssr_F_model_build(self.F_shape,'ssr_F_Cap_model')
-        #-------------------------------------------------------------------------------------------------------------------------        
-
+        ssr_F_Cap_model = self.ssr_F_model_build(self.F_shape,'ssr_F_Cap_model')
+        #-------------------------------------------------------------------------------------------------------------------------
         ssr_G_list = ssr_G_model(img_inputs)
         ssr_primcaps = ssr_S_model(ssr_G_list)
         ssr_Cap_list = ssr_Cap_model(ssr_primcaps)
@@ -442,51 +475,8 @@ class FSA_net_Var_Capsule(BaseCapsuleFSANet):
         #-------------------------------------------------------------------------------------------------------------------------   
         ssr_Cap_model = self.ssr_Cap_model_build((self.num_primcaps,64))
         #-------------------------------------------------------------------------------------------------------------------------
-        def ssr_F_model_build(feat_dim, name_F):
-            input_s1_pre = Input((feat_dim,))
-            input_s2_pre = Input((feat_dim,))
-            input_s3_pre = Input((feat_dim,))
-
-            feat_delta_s1 = Lambda(lambda x: x[:,0:4])(input_s1_pre)
-            delta_s1 = Dense(self.num_classes,activation='tanh',name='delta_s1')(feat_delta_s1)
-
-            feat_local_s1 = Lambda(lambda x: x[:,4:8])(input_s1_pre)
-            local_s1 = Dense(units=self.num_classes, activation='tanh', name='local_delta_stage1')(feat_local_s1)
-
-            feat_pred_s1 = Lambda(lambda x: x[:,8:16])(input_s1_pre)
-            feat_pred_s1 = Dense(self.stage_num[0]*self.num_classes,activation='relu')(feat_pred_s1) 
-            pred_s1 = Reshape((self.num_classes,self.stage_num[0]))(feat_pred_s1)
-            
-
-            feat_delta_s2 = Lambda(lambda x: x[:,0:4])(input_s2_pre)
-            delta_s2 = Dense(self.num_classes,activation='tanh',name='delta_s2')(feat_delta_s2)
-
-            feat_local_s2 = Lambda(lambda x: x[:,4:8])(input_s2_pre)
-            local_s2 = Dense(units=self.num_classes, activation='tanh', name='local_delta_stage2')(feat_local_s2)
-
-            feat_pred_s2 = Lambda(lambda x: x[:,8:16])(input_s2_pre)
-            feat_pred_s2 = Dense(self.stage_num[1]*self.num_classes,activation='relu')(feat_pred_s2) 
-            pred_s2 = Reshape((self.num_classes,self.stage_num[1]))(feat_pred_s2)
-            
-
-            feat_delta_s3 = Lambda(lambda x: x[:,0:4])(input_s3_pre)
-            delta_s3 = Dense(self.num_classes,activation='tanh',name='delta_s3')(feat_delta_s3)
-
-            feat_local_s3 = Lambda(lambda x: x[:,4:8])(input_s3_pre)
-            local_s3 = Dense(units=self.num_classes, activation='tanh', name='local_delta_stage3')(feat_local_s3)
-
-            feat_pred_s3 = Lambda(lambda x: x[:,8:16])(input_s3_pre)
-            feat_pred_s3 = Dense(self.stage_num[2]*self.num_classes,activation='relu')(feat_pred_s3) 
-            pred_s3 = Reshape((self.num_classes,self.stage_num[2]))(feat_pred_s3)
-        
-            ssr_F_model = Model(inputs=[input_s1_pre,input_s2_pre,input_s3_pre],outputs=[pred_s1,pred_s2,pred_s3,delta_s1,delta_s2,delta_s3,local_s1,local_s2,local_s3], name=name_F)
-            return ssr_F_model
-        
-        #ssr_F_model = ssr_F_model_build(21*64,'ssr_F_model')
-        # ssr_F_Cap_model = ssr_F_model_build(int(self.dim_capsule/3)*self.num_capsule,'ssr_F_model_Cap')
-        ssr_F_Cap_model = ssr_F_model_build(self.F_shape,'ssr_F_Cap_model')
+        ssr_F_Cap_model = self.ssr_F_model_build(self.F_shape,'ssr_F_Cap_model')
         #-------------------------------------------------------------------------------------------------------------------------
-
         ssr_G_list = ssr_G_model(img_inputs)
         ssr_primcaps = ssr_S_model(ssr_G_list)
         ssr_Cap_list = ssr_Cap_model(ssr_primcaps)
@@ -524,49 +514,8 @@ class FSA_net_noS_Capsule(BaseCapsuleFSANet):
         #------------------------------------------------------------------------------------------------------------------------- 
         ssr_Cap_model = self.ssr_Cap_model_build((self.num_primcaps,64))
         #-------------------------------------------------------------------------------------------------------------------------
-        def ssr_F_model_build(feat_dim, name_F):
-            input_s1_pre = Input((feat_dim,))
-            input_s2_pre = Input((feat_dim,))
-            input_s3_pre = Input((feat_dim,))
-
-            feat_delta_s1 = Lambda(lambda x: x[:,0:4])(input_s1_pre)
-            delta_s1 = Dense(self.num_classes,activation='tanh',name='delta_s1')(feat_delta_s1)
-
-            feat_local_s1 = Lambda(lambda x: x[:,4:8])(input_s1_pre)
-            local_s1 = Dense(units=self.num_classes, activation='tanh', name='local_delta_stage1')(feat_local_s1)
-
-            feat_pred_s1 = Lambda(lambda x: x[:,8:16])(input_s1_pre)
-            feat_pred_s1 = Dense(self.stage_num[0]*self.num_classes,activation='relu')(feat_pred_s1) 
-            pred_s1 = Reshape((self.num_classes,self.stage_num[0]))(feat_pred_s1)
-            
-
-            feat_delta_s2 = Lambda(lambda x: x[:,0:4])(input_s2_pre)
-            delta_s2 = Dense(self.num_classes,activation='tanh',name='delta_s2')(feat_delta_s2)
-
-            feat_local_s2 = Lambda(lambda x: x[:,4:8])(input_s2_pre)
-            local_s2 = Dense(units=self.num_classes, activation='tanh', name='local_delta_stage2')(feat_local_s2)
-
-            feat_pred_s2 = Lambda(lambda x: x[:,8:16])(input_s2_pre)
-            feat_pred_s2 = Dense(self.stage_num[1]*self.num_classes,activation='relu')(feat_pred_s2) 
-            pred_s2 = Reshape((self.num_classes,self.stage_num[1]))(feat_pred_s2)
-            
-
-            feat_delta_s3 = Lambda(lambda x: x[:,0:4])(input_s3_pre)
-            delta_s3 = Dense(self.num_classes,activation='tanh',name='delta_s3')(feat_delta_s3)
-
-            feat_local_s3 = Lambda(lambda x: x[:,4:8])(input_s3_pre)
-            local_s3 = Dense(units=self.num_classes, activation='tanh', name='local_delta_stage3')(feat_local_s3)
-
-            feat_pred_s3 = Lambda(lambda x: x[:,8:16])(input_s3_pre)
-            feat_pred_s3 = Dense(self.stage_num[2]*self.num_classes,activation='relu')(feat_pred_s3) 
-            pred_s3 = Reshape((self.num_classes,self.stage_num[2]))(feat_pred_s3)
-        
-            ssr_F_model = Model(inputs=[input_s1_pre,input_s2_pre,input_s3_pre],outputs=[pred_s1,pred_s2,pred_s3,delta_s1,delta_s2,delta_s3,local_s1,local_s2,local_s3], name=name_F)
-            return ssr_F_model
-        
-        ssr_F_Cap_model = ssr_F_model_build(self.F_shape,'ssr_F_Cap_model')
+        ssr_F_Cap_model = self.ssr_F_model_build(self.F_shape,'ssr_F_Cap_model')
         #-------------------------------------------------------------------------------------------------------------------------
-
         ssr_G_list = ssr_G_model(img_inputs)
         ssr_primcaps = ssr_S_model(ssr_G_list)
         ssr_Cap_list = ssr_Cap_model(ssr_primcaps)
@@ -642,46 +591,7 @@ class FSA_net_Capsule_FC(BaseCapsuleFSANet):
         #-------------------------------------------------------------------------------------------------------------------------
         ssr_Cap_model = self.ssr_Cap_model_build((self.num_primcaps,64))
         #-------------------------------------------------------------------------------------------------------------------------
-        def ssr_F_model_build(feat_dim, name_F):
-            input_s1_pre = Input((feat_dim,))
-            input_s2_pre = Input((feat_dim,))
-            input_s3_pre = Input((feat_dim,))
-
-            feat_delta_s1 = Dense(2*self.num_classes,activation='tanh')(input_s1_pre)
-            delta_s1 = Dense(self.num_classes,activation='tanh',name='delta_s1')(feat_delta_s1)
-
-            feat_local_s1 = Dense(2*self.num_classes,activation='tanh')(input_s1_pre)
-            local_s1 = Dense(units=self.num_classes, activation='tanh', name='local_delta_stage1')(feat_local_s1)
-
-            feat_pred_s1 = Dense(self.stage_num[0]*self.num_classes,activation='relu')(input_s1_pre) 
-            pred_s1 = Reshape((self.num_classes,self.stage_num[0]))(feat_pred_s1)
-            
-
-            feat_delta_s2 = Dense(2*self.num_classes,activation='tanh')(input_s2_pre)
-            delta_s2 = Dense(self.num_classes,activation='tanh',name='delta_s2')(feat_delta_s2)
-
-            feat_local_s2 = Dense(2*self.num_classes,activation='tanh')(input_s2_pre)
-            local_s2 = Dense(units=self.num_classes, activation='tanh', name='local_delta_stage2')(feat_local_s2)
-
-            feat_pred_s2 = Dense(self.stage_num[1]*self.num_classes,activation='relu')(input_s2_pre) 
-            pred_s2 = Reshape((self.num_classes,self.stage_num[1]))(feat_pred_s2)
-            
-
-            feat_delta_s3 = Dense(2*self.num_classes,activation='tanh')(input_s3_pre)
-            delta_s3 = Dense(self.num_classes,activation='tanh',name='delta_s3')(feat_delta_s3)
-
-            feat_local_s3 = Dense(2*self.num_classes,activation='tanh')(input_s3_pre)
-            local_s3 = Dense(units=self.num_classes, activation='tanh', name='local_delta_stage3')(feat_local_s3)
-
-            feat_pred_s3 = Dense(self.stage_num[2]*self.num_classes,activation='relu')(input_s3_pre) 
-            pred_s3 = Reshape((self.num_classes,self.stage_num[2]))(feat_pred_s3)
-        
-            ssr_F_model = Model(inputs=[input_s1_pre,input_s2_pre,input_s3_pre],outputs=[pred_s1,pred_s2,pred_s3,delta_s1,delta_s2,delta_s3,local_s1,local_s2,local_s3], name=name_F)
-            return ssr_F_model
-        
-        #ssr_F_model = ssr_F_model_build(21*64,'ssr_F_model')
-        # ssr_F_Cap_model = ssr_F_model_build(int(self.dim_capsule/3)*self.num_capsule,'ssr_F_model_Cap')
-        ssr_F_Cap_model = ssr_F_model_build(self.F_shape,'ssr_F_Cap_model')
+        ssr_F_Cap_model = self.ssr_FC_model_build(self.F_shape,'ssr_F_Cap_model')
         #-------------------------------------------------------------------------------------------------------------------------
         ssr_G_list = ssr_G_model(img_inputs)
         ssr_primcaps = ssr_S_model(ssr_G_list)
@@ -763,46 +673,7 @@ class FSA_net_Var_Capsule_FC(BaseCapsuleFSANet):
         #-------------------------------------------------------------------------------------------------------------------------
         ssr_Cap_model = self.ssr_Cap_model_build((self.num_primcaps,64))
         #-------------------------------------------------------------------------------------------------------------------------
-        def ssr_F_model_build(feat_dim, name_F):
-            input_s1_pre = Input((feat_dim,))
-            input_s2_pre = Input((feat_dim,))
-            input_s3_pre = Input((feat_dim,))
-
-            feat_delta_s1 = Dense(2*self.num_classes,activation='tanh')(input_s1_pre)
-            delta_s1 = Dense(self.num_classes,activation='tanh',name='delta_s1')(feat_delta_s1)
-
-            feat_local_s1 = Dense(2*self.num_classes,activation='tanh')(input_s1_pre)
-            local_s1 = Dense(units=self.num_classes, activation='tanh', name='local_delta_stage1')(feat_local_s1)
-
-            feat_pred_s1 = Dense(self.stage_num[0]*self.num_classes,activation='relu')(input_s1_pre) 
-            pred_s1 = Reshape((self.num_classes,self.stage_num[0]))(feat_pred_s1)
-            
-
-            feat_delta_s2 = Dense(2*self.num_classes,activation='tanh')(input_s2_pre)
-            delta_s2 = Dense(self.num_classes,activation='tanh',name='delta_s2')(feat_delta_s2)
-
-            feat_local_s2 = Dense(2*self.num_classes,activation='tanh')(input_s2_pre)
-            local_s2 = Dense(units=self.num_classes, activation='tanh', name='local_delta_stage2')(feat_local_s2)
-
-            feat_pred_s2 = Dense(self.stage_num[1]*self.num_classes,activation='relu')(input_s2_pre) 
-            pred_s2 = Reshape((self.num_classes,self.stage_num[1]))(feat_pred_s2)
-            
-
-            feat_delta_s3 = Dense(2*self.num_classes,activation='tanh')(input_s3_pre)
-            delta_s3 = Dense(self.num_classes,activation='tanh',name='delta_s3')(feat_delta_s3)
-
-            feat_local_s3 = Dense(2*self.num_classes,activation='tanh')(input_s3_pre)
-            local_s3 = Dense(units=self.num_classes, activation='tanh', name='local_delta_stage3')(feat_local_s3)
-
-            feat_pred_s3 = Dense(self.stage_num[2]*self.num_classes,activation='relu')(input_s3_pre) 
-            pred_s3 = Reshape((self.num_classes,self.stage_num[2]))(feat_pred_s3)
-       
-            ssr_F_model = Model(inputs=[input_s1_pre,input_s2_pre,input_s3_pre],outputs=[pred_s1,pred_s2,pred_s3,delta_s1,delta_s2,delta_s3,local_s1,local_s2,local_s3], name=name_F)
-            return ssr_F_model
-        
-        #ssr_F_model = ssr_F_model_build(21*64,'ssr_F_model')
-        # ssr_F_Cap_model = ssr_F_model_build(int(self.dim_capsule/3)*self.num_capsule,'ssr_F_model_Cap')
-        ssr_F_Cap_model = ssr_F_model_build(self.F_shape,'ssr_F_Cap_model')
+        ssr_F_Cap_model = self.ssr_FC_model_build(self.F_shape,'ssr_F_Cap_model')
         #-------------------------------------------------------------------------------------------------------------------------
         ssr_G_list = ssr_G_model(img_inputs)
         ssr_primcaps = ssr_S_model(ssr_G_list)
@@ -841,44 +712,7 @@ class FSA_net_noS_Capsule_FC(BaseCapsuleFSANet):
         #-------------------------------------------------------------------------------------------------------------------------
         ssr_Cap_model = self.ssr_Cap_model_build((self.num_primcaps,64))
         #-------------------------------------------------------------------------------------------------------------------------
-        def ssr_F_model_build(feat_dim, name_F):
-            input_s1_pre = Input((feat_dim,))
-            input_s2_pre = Input((feat_dim,))
-            input_s3_pre = Input((feat_dim,))
-
-            feat_delta_s1 = Dense(2*self.num_classes,activation='tanh')(input_s1_pre)
-            delta_s1 = Dense(self.num_classes,activation='tanh',name='delta_s1')(feat_delta_s1)
-
-            feat_local_s1 = Dense(2*self.num_classes,activation='tanh')(input_s1_pre)
-            local_s1 = Dense(units=self.num_classes, activation='tanh', name='local_delta_stage1')(feat_local_s1)
-
-            feat_pred_s1 = Dense(self.stage_num[0]*self.num_classes,activation='relu')(input_s1_pre) 
-            pred_s1 = Reshape((self.num_classes,self.stage_num[0]))(feat_pred_s1)
-            
-
-            feat_delta_s2 = Dense(2*self.num_classes,activation='tanh')(input_s2_pre)
-            delta_s2 = Dense(self.num_classes,activation='tanh',name='delta_s2')(feat_delta_s2)
-
-            feat_local_s2 = Dense(2*self.num_classes,activation='tanh')(input_s2_pre)
-            local_s2 = Dense(units=self.num_classes, activation='tanh', name='local_delta_stage2')(feat_local_s2)
-
-            feat_pred_s2 = Dense(self.stage_num[1]*self.num_classes,activation='relu')(input_s2_pre) 
-            pred_s2 = Reshape((self.num_classes,self.stage_num[1]))(feat_pred_s2)
-            
-
-            feat_delta_s3 = Dense(2*self.num_classes,activation='tanh')(input_s3_pre)
-            delta_s3 = Dense(self.num_classes,activation='tanh',name='delta_s3')(feat_delta_s3)
-
-            feat_local_s3 = Dense(2*self.num_classes,activation='tanh')(input_s3_pre)
-            local_s3 = Dense(units=self.num_classes, activation='tanh', name='local_delta_stage3')(feat_local_s3)
-
-            feat_pred_s3 = Dense(self.stage_num[2]*self.num_classes,activation='relu')(input_s3_pre) 
-            pred_s3 = Reshape((self.num_classes,self.stage_num[2]))(feat_pred_s3)
-       
-            ssr_F_model = Model(inputs=[input_s1_pre,input_s2_pre,input_s3_pre],outputs=[pred_s1,pred_s2,pred_s3,delta_s1,delta_s2,delta_s3,local_s1,local_s2,local_s3], name=name_F)
-            return ssr_F_model
-        
-        ssr_F_Cap_model = ssr_F_model_build(self.F_shape,'ssr_F_Cap_model')
+        ssr_F_Cap_model = self.ssr_FC_model_build(self.F_shape,'ssr_F_Cap_model')
         #-------------------------------------------------------------------------------------------------------------------------
         ssr_G_list = ssr_G_model(img_inputs)
         ssr_primcaps = ssr_S_model(ssr_G_list)
@@ -955,47 +789,7 @@ class FSA_net_NetVLAD(BaseNetVLADFSANet):
         #-------------------------------------------------------------------------------------------------------------------------        
         ssr_Agg_model = self.ssr_Agg_model_build((self.num_primcaps,64))
         #-------------------------------------------------------------------------------------------------------------------------
-        def ssr_F_model_build(feat_dim, name_F):
-            input_s1_pre = Input((feat_dim,))
-            input_s2_pre = Input((feat_dim,))
-            input_s3_pre = Input((feat_dim,))
-
-            feat_delta_s1 = Lambda(lambda x: x[:,0:4])(input_s1_pre)
-            delta_s1 = Dense(self.num_classes,activation='tanh',name='delta_s1')(feat_delta_s1)
-
-            feat_local_s1 = Lambda(lambda x: x[:,4:8])(input_s1_pre)
-            local_s1 = Dense(units=self.num_classes, activation='tanh', name='local_delta_stage1')(feat_local_s1)
-
-            feat_pred_s1 = Lambda(lambda x: x[:,8:16])(input_s1_pre)
-            feat_pred_s1 = Dense(self.stage_num[0]*self.num_classes,activation='relu')(feat_pred_s1) 
-            pred_s1 = Reshape((self.num_classes,self.stage_num[0]))(feat_pred_s1)
-            
-
-            feat_delta_s2 = Lambda(lambda x: x[:,0:4])(input_s2_pre)
-            delta_s2 = Dense(self.num_classes,activation='tanh',name='delta_s2')(feat_delta_s2)
-
-            feat_local_s2 = Lambda(lambda x: x[:,4:8])(input_s2_pre)
-            local_s2 = Dense(units=self.num_classes, activation='tanh', name='local_delta_stage2')(feat_local_s2)
-
-            feat_pred_s2 = Lambda(lambda x: x[:,8:16])(input_s2_pre)
-            feat_pred_s2 = Dense(self.stage_num[1]*self.num_classes,activation='relu')(feat_pred_s2) 
-            pred_s2 = Reshape((self.num_classes,self.stage_num[1]))(feat_pred_s2)
-            
-
-            feat_delta_s3 = Lambda(lambda x: x[:,0:4])(input_s3_pre)
-            delta_s3 = Dense(self.num_classes,activation='tanh',name='delta_s3')(feat_delta_s3)
-
-            feat_local_s3 = Lambda(lambda x: x[:,4:8])(input_s3_pre)
-            local_s3 = Dense(units=self.num_classes, activation='tanh', name='local_delta_stage3')(feat_local_s3)
-
-            feat_pred_s3 = Lambda(lambda x: x[:,8:16])(input_s3_pre)
-            feat_pred_s3 = Dense(self.stage_num[2]*self.num_classes,activation='relu')(feat_pred_s3) 
-            pred_s3 = Reshape((self.num_classes,self.stage_num[2]))(feat_pred_s3)
-        
-            ssr_F_model = Model(inputs=[input_s1_pre,input_s2_pre,input_s3_pre],outputs=[pred_s1,pred_s2,pred_s3,delta_s1,delta_s2,delta_s3,local_s1,local_s2,local_s3], name=name_F)
-            return ssr_F_model
-        
-        ssr_F_model = ssr_F_model_build(self.F_shape,'ssr_F_model')
+        ssr_F_model = self.ssr_F_model_build(self.F_shape,'ssr_F_model')
         #-------------------------------------------------------------------------------------------------------------------------
         ssr_G_list = ssr_G_model(img_inputs)
         ssr_primcaps = ssr_S_model(ssr_G_list)
@@ -1077,47 +871,7 @@ class FSA_net_Var_NetVLAD(BaseNetVLADFSANet):
         #-------------------------------------------------------------------------------------------------------------------------
         ssr_Agg_model = self.ssr_Agg_model_build((self.num_primcaps,64))
         #-------------------------------------------------------------------------------------------------------------------------
-        def ssr_F_model_build(feat_dim, name_F):
-            input_s1_pre = Input((feat_dim,))
-            input_s2_pre = Input((feat_dim,))
-            input_s3_pre = Input((feat_dim,))
-
-            feat_delta_s1 = Lambda(lambda x: x[:,0:4])(input_s1_pre)
-            delta_s1 = Dense(self.num_classes,activation='tanh',name='delta_s1')(feat_delta_s1)
-
-            feat_local_s1 = Lambda(lambda x: x[:,4:8])(input_s1_pre)
-            local_s1 = Dense(units=self.num_classes, activation='tanh', name='local_delta_stage1')(feat_local_s1)
-
-            feat_pred_s1 = Lambda(lambda x: x[:,8:16])(input_s1_pre)
-            feat_pred_s1 = Dense(self.stage_num[0]*self.num_classes,activation='relu')(feat_pred_s1) 
-            pred_s1 = Reshape((self.num_classes,self.stage_num[0]))(feat_pred_s1)
-            
-
-            feat_delta_s2 = Lambda(lambda x: x[:,0:4])(input_s2_pre)
-            delta_s2 = Dense(self.num_classes,activation='tanh',name='delta_s2')(feat_delta_s2)
-
-            feat_local_s2 = Lambda(lambda x: x[:,4:8])(input_s2_pre)
-            local_s2 = Dense(units=self.num_classes, activation='tanh', name='local_delta_stage2')(feat_local_s2)
-
-            feat_pred_s2 = Lambda(lambda x: x[:,8:16])(input_s2_pre)
-            feat_pred_s2 = Dense(self.stage_num[1]*self.num_classes,activation='relu')(feat_pred_s2) 
-            pred_s2 = Reshape((self.num_classes,self.stage_num[1]))(feat_pred_s2)
-            
-
-            feat_delta_s3 = Lambda(lambda x: x[:,0:4])(input_s3_pre)
-            delta_s3 = Dense(self.num_classes,activation='tanh',name='delta_s3')(feat_delta_s3)
-
-            feat_local_s3 = Lambda(lambda x: x[:,4:8])(input_s3_pre)
-            local_s3 = Dense(units=self.num_classes, activation='tanh', name='local_delta_stage3')(feat_local_s3)
-
-            feat_pred_s3 = Lambda(lambda x: x[:,8:16])(input_s3_pre)
-            feat_pred_s3 = Dense(self.stage_num[2]*self.num_classes,activation='relu')(feat_pred_s3) 
-            pred_s3 = Reshape((self.num_classes,self.stage_num[2]))(feat_pred_s3)
-        
-            ssr_F_model = Model(inputs=[input_s1_pre,input_s2_pre,input_s3_pre],outputs=[pred_s1,pred_s2,pred_s3,delta_s1,delta_s2,delta_s3,local_s1,local_s2,local_s3], name=name_F)
-            return ssr_F_model
-        
-        ssr_F_model = ssr_F_model_build(self.F_shape,'ssr_F_model')
+        ssr_F_model = self.ssr_F_model_build(self.F_shape,'ssr_F_model')
         #-------------------------------------------------------------------------------------------------------------------------
         ssr_G_list = ssr_G_model(img_inputs)
         ssr_primcaps = ssr_S_model(ssr_G_list)
@@ -1156,47 +910,7 @@ class FSA_net_noS_NetVLAD(BaseNetVLADFSANet):
         #-------------------------------------------------------------------------------------------------------------------------
         ssr_Agg_model = self.ssr_Agg_model_build((self.num_primcaps,64))
         #-------------------------------------------------------------------------------------------------------------------------
-        def ssr_F_model_build(feat_dim, name_F):
-            input_s1_pre = Input((feat_dim,))
-            input_s2_pre = Input((feat_dim,))
-            input_s3_pre = Input((feat_dim,))
-
-            feat_delta_s1 = Lambda(lambda x: x[:,0:4])(input_s1_pre)
-            delta_s1 = Dense(self.num_classes,activation='tanh',name='delta_s1')(feat_delta_s1)
-
-            feat_local_s1 = Lambda(lambda x: x[:,4:8])(input_s1_pre)
-            local_s1 = Dense(units=self.num_classes, activation='tanh', name='local_delta_stage1')(feat_local_s1)
-
-            feat_pred_s1 = Lambda(lambda x: x[:,8:16])(input_s1_pre)
-            feat_pred_s1 = Dense(self.stage_num[0]*self.num_classes,activation='relu')(feat_pred_s1) 
-            pred_s1 = Reshape((self.num_classes,self.stage_num[0]))(feat_pred_s1)
-            
-
-            feat_delta_s2 = Lambda(lambda x: x[:,0:4])(input_s2_pre)
-            delta_s2 = Dense(self.num_classes,activation='tanh',name='delta_s2')(feat_delta_s2)
-
-            feat_local_s2 = Lambda(lambda x: x[:,4:8])(input_s2_pre)
-            local_s2 = Dense(units=self.num_classes, activation='tanh', name='local_delta_stage2')(feat_local_s2)
-
-            feat_pred_s2 = Lambda(lambda x: x[:,8:16])(input_s2_pre)
-            feat_pred_s2 = Dense(self.stage_num[1]*self.num_classes,activation='relu')(feat_pred_s2) 
-            pred_s2 = Reshape((self.num_classes,self.stage_num[1]))(feat_pred_s2)
-            
-
-            feat_delta_s3 = Lambda(lambda x: x[:,0:4])(input_s3_pre)
-            delta_s3 = Dense(self.num_classes,activation='tanh',name='delta_s3')(feat_delta_s3)
-
-            feat_local_s3 = Lambda(lambda x: x[:,4:8])(input_s3_pre)
-            local_s3 = Dense(units=self.num_classes, activation='tanh', name='local_delta_stage3')(feat_local_s3)
-
-            feat_pred_s3 = Lambda(lambda x: x[:,8:16])(input_s3_pre)
-            feat_pred_s3 = Dense(self.stage_num[2]*self.num_classes,activation='relu')(feat_pred_s3) 
-            pred_s3 = Reshape((self.num_classes,self.stage_num[2]))(feat_pred_s3)
-        
-            ssr_F_model = Model(inputs=[input_s1_pre,input_s2_pre,input_s3_pre],outputs=[pred_s1,pred_s2,pred_s3,delta_s1,delta_s2,delta_s3,local_s1,local_s2,local_s3], name=name_F)
-            return ssr_F_model
-        
-        ssr_F_model = ssr_F_model_build(self.F_shape,'ssr_F_model')
+        ssr_F_model = self.ssr_F_model_build(self.F_shape,'ssr_F_model')
         #-------------------------------------------------------------------------------------------------------------------------
         ssr_G_list = ssr_G_model(img_inputs)
         ssr_primcaps = ssr_S_model(ssr_G_list)
@@ -1273,44 +987,7 @@ class FSA_net_NetVLAD_FC(BaseNetVLADFSANet):
         #-------------------------------------------------------------------------------------------------------------------------
         ssr_Agg_model = self.ssr_Agg_model_build((self.num_primcaps,64))
         #-------------------------------------------------------------------------------------------------------------------------
-        def ssr_F_model_build(feat_dim, name_F):
-            input_s1_pre = Input((feat_dim,))
-            input_s2_pre = Input((feat_dim,))
-            input_s3_pre = Input((feat_dim,))
-
-            feat_delta_s1 = Dense(2*self.num_classes,activation='tanh')(input_s1_pre)
-            delta_s1 = Dense(self.num_classes,activation='tanh',name='delta_s1')(feat_delta_s1)
-
-            feat_local_s1 = Dense(2*self.num_classes,activation='tanh')(input_s1_pre)
-            local_s1 = Dense(units=self.num_classes, activation='tanh', name='local_delta_stage1')(feat_local_s1)
-
-            feat_pred_s1 = Dense(self.stage_num[0]*self.num_classes,activation='relu')(input_s1_pre) 
-            pred_s1 = Reshape((self.num_classes,self.stage_num[0]))(feat_pred_s1)
-            
-
-            feat_delta_s2 = Dense(2*self.num_classes,activation='tanh')(input_s2_pre)
-            delta_s2 = Dense(self.num_classes,activation='tanh',name='delta_s2')(feat_delta_s2)
-
-            feat_local_s2 = Dense(2*self.num_classes,activation='tanh')(input_s2_pre)
-            local_s2 = Dense(units=self.num_classes, activation='tanh', name='local_delta_stage2')(feat_local_s2)
-
-            feat_pred_s2 = Dense(self.stage_num[1]*self.num_classes,activation='relu')(input_s2_pre) 
-            pred_s2 = Reshape((self.num_classes,self.stage_num[1]))(feat_pred_s2)
-            
-
-            feat_delta_s3 = Dense(2*self.num_classes,activation='tanh')(input_s3_pre)
-            delta_s3 = Dense(self.num_classes,activation='tanh',name='delta_s3')(feat_delta_s3)
-
-            feat_local_s3 = Dense(2*self.num_classes,activation='tanh')(input_s3_pre)
-            local_s3 = Dense(units=self.num_classes, activation='tanh', name='local_delta_stage3')(feat_local_s3)
-
-            feat_pred_s3 = Dense(self.stage_num[2]*self.num_classes,activation='relu')(input_s3_pre) 
-            pred_s3 = Reshape((self.num_classes,self.stage_num[2]))(feat_pred_s3)
-       
-            ssr_F_model = Model(inputs=[input_s1_pre,input_s2_pre,input_s3_pre],outputs=[pred_s1,pred_s2,pred_s3,delta_s1,delta_s2,delta_s3,local_s1,local_s2,local_s3], name=name_F)
-            return ssr_F_model
-        
-        ssr_F_model = ssr_F_model_build(self.F_shape,'ssr_F_model')
+        ssr_F_model = self.ssr_FC_model_build(self.F_shape,'ssr_F_model')
         #-------------------------------------------------------------------------------------------------------------------------     
         ssr_G_list = ssr_G_model(img_inputs)
         ssr_primcaps = ssr_S_model(ssr_G_list)
@@ -1392,44 +1069,7 @@ class FSA_net_Var_NetVLAD_FC(BaseNetVLADFSANet):
         #-------------------------------------------------------------------------------------------------------------------------
         ssr_Agg_model = self.ssr_Agg_model_build((self.num_primcaps,64))
         #-------------------------------------------------------------------------------------------------------------------------
-        def ssr_F_model_build(feat_dim, name_F):
-            input_s1_pre = Input((feat_dim,))
-            input_s2_pre = Input((feat_dim,))
-            input_s3_pre = Input((feat_dim,))
-
-            feat_delta_s1 = Dense(2*self.num_classes,activation='tanh')(input_s1_pre)
-            delta_s1 = Dense(self.num_classes,activation='tanh',name='delta_s1')(feat_delta_s1)
-
-            feat_local_s1 = Dense(2*self.num_classes,activation='tanh')(input_s1_pre)
-            local_s1 = Dense(units=self.num_classes, activation='tanh', name='local_delta_stage1')(feat_local_s1)
-
-            feat_pred_s1 = Dense(self.stage_num[0]*self.num_classes,activation='relu')(input_s1_pre) 
-            pred_s1 = Reshape((self.num_classes,self.stage_num[0]))(feat_pred_s1)
-            
-
-            feat_delta_s2 = Dense(2*self.num_classes,activation='tanh')(input_s2_pre)
-            delta_s2 = Dense(self.num_classes,activation='tanh',name='delta_s2')(feat_delta_s2)
-
-            feat_local_s2 = Dense(2*self.num_classes,activation='tanh')(input_s2_pre)
-            local_s2 = Dense(units=self.num_classes, activation='tanh', name='local_delta_stage2')(feat_local_s2)
-
-            feat_pred_s2 = Dense(self.stage_num[1]*self.num_classes,activation='relu')(input_s2_pre) 
-            pred_s2 = Reshape((self.num_classes,self.stage_num[1]))(feat_pred_s2)
-            
-
-            feat_delta_s3 = Dense(2*self.num_classes,activation='tanh')(input_s3_pre)
-            delta_s3 = Dense(self.num_classes,activation='tanh',name='delta_s3')(feat_delta_s3)
-
-            feat_local_s3 = Dense(2*self.num_classes,activation='tanh')(input_s3_pre)
-            local_s3 = Dense(units=self.num_classes, activation='tanh', name='local_delta_stage3')(feat_local_s3)
-
-            feat_pred_s3 = Dense(self.stage_num[2]*self.num_classes,activation='relu')(input_s3_pre) 
-            pred_s3 = Reshape((self.num_classes,self.stage_num[2]))(feat_pred_s3)
-       
-            ssr_F_model = Model(inputs=[input_s1_pre,input_s2_pre,input_s3_pre],outputs=[pred_s1,pred_s2,pred_s3,delta_s1,delta_s2,delta_s3,local_s1,local_s2,local_s3], name=name_F)
-            return ssr_F_model
-        
-        ssr_F_model = ssr_F_model_build(self.F_shape,'ssr_F_model')
+        ssr_F_model = self.ssr_FC_model_build(self.F_shape,'ssr_F_model')
         #-------------------------------------------------------------------------------------------------------------------------    
         ssr_G_list = ssr_G_model(img_inputs)
         ssr_primcaps = ssr_S_model(ssr_G_list)
@@ -1467,46 +1107,8 @@ class FSA_net_noS_NetVLAD_FC(BaseNetVLADFSANet):
         #-------------------------------------------------------------------------------------------------------------------------
         ssr_Agg_model = self.ssr_Agg_model_build((self.num_primcaps,64))
         #-------------------------------------------------------------------------------------------------------------------------
-        def ssr_F_model_build(feat_dim, name_F):
-            input_s1_pre = Input((feat_dim,))
-            input_s2_pre = Input((feat_dim,))
-            input_s3_pre = Input((feat_dim,))
-
-            feat_delta_s1 = Dense(2*self.num_classes,activation='tanh')(input_s1_pre)
-            delta_s1 = Dense(self.num_classes,activation='tanh',name='delta_s1')(feat_delta_s1)
-
-            feat_local_s1 = Dense(2*self.num_classes,activation='tanh')(input_s1_pre)
-            local_s1 = Dense(units=self.num_classes, activation='tanh', name='local_delta_stage1')(feat_local_s1)
-
-            feat_pred_s1 = Dense(self.stage_num[0]*self.num_classes,activation='relu')(input_s1_pre) 
-            pred_s1 = Reshape((self.num_classes,self.stage_num[0]))(feat_pred_s1)
-            
-
-            feat_delta_s2 = Dense(2*self.num_classes,activation='tanh')(input_s2_pre)
-            delta_s2 = Dense(self.num_classes,activation='tanh',name='delta_s2')(feat_delta_s2)
-
-            feat_local_s2 = Dense(2*self.num_classes,activation='tanh')(input_s2_pre)
-            local_s2 = Dense(units=self.num_classes, activation='tanh', name='local_delta_stage2')(feat_local_s2)
-
-            feat_pred_s2 = Dense(self.stage_num[1]*self.num_classes,activation='relu')(input_s2_pre) 
-            pred_s2 = Reshape((self.num_classes,self.stage_num[1]))(feat_pred_s2)
-            
-
-            feat_delta_s3 = Dense(2*self.num_classes,activation='tanh')(input_s3_pre)
-            delta_s3 = Dense(self.num_classes,activation='tanh',name='delta_s3')(feat_delta_s3)
-
-            feat_local_s3 = Dense(2*self.num_classes,activation='tanh')(input_s3_pre)
-            local_s3 = Dense(units=self.num_classes, activation='tanh', name='local_delta_stage3')(feat_local_s3)
-
-            feat_pred_s3 = Dense(self.stage_num[2]*self.num_classes,activation='relu')(input_s3_pre) 
-            pred_s3 = Reshape((self.num_classes,self.stage_num[2]))(feat_pred_s3)
-       
-            ssr_F_model = Model(inputs=[input_s1_pre,input_s2_pre,input_s3_pre],outputs=[pred_s1,pred_s2,pred_s3,delta_s1,delta_s2,delta_s3,local_s1,local_s2,local_s3], name=name_F)
-            return ssr_F_model
-        
-        ssr_F_model = ssr_F_model_build(self.F_shape,'ssr_F_model')
+        ssr_F_model = self.ssr_FC_model_build(self.F_shape,'ssr_F_model')
         #-------------------------------------------------------------------------------------------------------------------------
-
         ssr_G_list = ssr_G_model(img_inputs)
         ssr_primcaps = ssr_S_model(ssr_G_list)
         ssr_Agg_list = ssr_Agg_model(ssr_primcaps)
@@ -1582,49 +1184,8 @@ class FSA_net_Metric(BaseMetricFSANet):
         #-------------------------------------------------------------------------------------------------------------------------
         ssr_Metric_model = self.ssr_Metric_model_build((self.num_primcaps,64))
         #-------------------------------------------------------------------------------------------------------------------------
-        def ssr_F_model_build(feat_dim, name_F):
-            input_s1_pre = Input((feat_dim,))
-            input_s2_pre = Input((feat_dim,))
-            input_s3_pre = Input((feat_dim,))
-
-            feat_delta_s1 = Lambda(lambda x: x[:,0:4])(input_s1_pre)
-            delta_s1 = Dense(self.num_classes,activation='tanh',name='delta_s1')(feat_delta_s1)
-
-            feat_local_s1 = Lambda(lambda x: x[:,4:8])(input_s1_pre)
-            local_s1 = Dense(units=self.num_classes, activation='tanh', name='local_delta_stage1')(feat_local_s1)
-
-            feat_pred_s1 = Lambda(lambda x: x[:,8:16])(input_s1_pre)
-            feat_pred_s1 = Dense(self.stage_num[0]*self.num_classes,activation='relu')(feat_pred_s1) 
-            pred_s1 = Reshape((self.num_classes,self.stage_num[0]))(feat_pred_s1)
-            
-
-            feat_delta_s2 = Lambda(lambda x: x[:,0:4])(input_s2_pre)
-            delta_s2 = Dense(self.num_classes,activation='tanh',name='delta_s2')(feat_delta_s2)
-
-            feat_local_s2 = Lambda(lambda x: x[:,4:8])(input_s2_pre)
-            local_s2 = Dense(units=self.num_classes, activation='tanh', name='local_delta_stage2')(feat_local_s2)
-
-            feat_pred_s2 = Lambda(lambda x: x[:,8:16])(input_s2_pre)
-            feat_pred_s2 = Dense(self.stage_num[1]*self.num_classes,activation='relu')(feat_pred_s2) 
-            pred_s2 = Reshape((self.num_classes,self.stage_num[1]))(feat_pred_s2)
-            
-
-            feat_delta_s3 = Lambda(lambda x: x[:,0:4])(input_s3_pre)
-            delta_s3 = Dense(self.num_classes,activation='tanh',name='delta_s3')(feat_delta_s3)
-
-            feat_local_s3 = Lambda(lambda x: x[:,4:8])(input_s3_pre)
-            local_s3 = Dense(units=self.num_classes, activation='tanh', name='local_delta_stage3')(feat_local_s3)
-
-            feat_pred_s3 = Lambda(lambda x: x[:,8:16])(input_s3_pre)
-            feat_pred_s3 = Dense(self.stage_num[2]*self.num_classes,activation='relu')(feat_pred_s3) 
-            pred_s3 = Reshape((self.num_classes,self.stage_num[2]))(feat_pred_s3)
-        
-            ssr_F_model = Model(inputs=[input_s1_pre,input_s2_pre,input_s3_pre],outputs=[pred_s1,pred_s2,pred_s3,delta_s1,delta_s2,delta_s3,local_s1,local_s2,local_s3], name=name_F)
-            return ssr_F_model
-        
-        ssr_F_model = ssr_F_model_build(self.F_shape,'ssr_F_model')
+        ssr_F_model = self.ssr_F_model_build(self.F_shape,'ssr_F_model')
         #-------------------------------------------------------------------------------------------------------------------------
-
         ssr_G_list = ssr_G_model(img_inputs)
         ssr_primcaps = ssr_S_model(ssr_G_list)
         ssr_Metric_list = ssr_Metric_model(ssr_primcaps)
@@ -1637,7 +1198,6 @@ class FSA_net_Metric(BaseMetricFSANet):
 class FSA_net_Var_Metric(BaseMetricFSANet):
     def __init__(self, image_size,num_classes,stage_num,lambda_d, S_set):
         super(FSA_net_Var_Metric, self).__init__(image_size,num_classes,stage_num,lambda_d, S_set)
-
         
     def __call__(self):
         logging.debug("Creating model...")
@@ -1705,47 +1265,7 @@ class FSA_net_Var_Metric(BaseMetricFSANet):
         #-------------------------------------------------------------------------------------------------------------------------
         ssr_Metric_model = self.ssr_Metric_model_build((self.num_primcaps,64))
         #-------------------------------------------------------------------------------------------------------------------------
-        def ssr_F_model_build(feat_dim, name_F):
-            input_s1_pre = Input((feat_dim,))
-            input_s2_pre = Input((feat_dim,))
-            input_s3_pre = Input((feat_dim,))
-
-            feat_delta_s1 = Lambda(lambda x: x[:,0:4])(input_s1_pre)
-            delta_s1 = Dense(self.num_classes,activation='tanh',name='delta_s1')(feat_delta_s1)
-
-            feat_local_s1 = Lambda(lambda x: x[:,4:8])(input_s1_pre)
-            local_s1 = Dense(units=self.num_classes, activation='tanh', name='local_delta_stage1')(feat_local_s1)
-
-            feat_pred_s1 = Lambda(lambda x: x[:,8:16])(input_s1_pre)
-            feat_pred_s1 = Dense(self.stage_num[0]*self.num_classes,activation='relu')(feat_pred_s1) 
-            pred_s1 = Reshape((self.num_classes,self.stage_num[0]))(feat_pred_s1)
-            
-
-            feat_delta_s2 = Lambda(lambda x: x[:,0:4])(input_s2_pre)
-            delta_s2 = Dense(self.num_classes,activation='tanh',name='delta_s2')(feat_delta_s2)
-
-            feat_local_s2 = Lambda(lambda x: x[:,4:8])(input_s2_pre)
-            local_s2 = Dense(units=self.num_classes, activation='tanh', name='local_delta_stage2')(feat_local_s2)
-
-            feat_pred_s2 = Lambda(lambda x: x[:,8:16])(input_s2_pre)
-            feat_pred_s2 = Dense(self.stage_num[1]*self.num_classes,activation='relu')(feat_pred_s2) 
-            pred_s2 = Reshape((self.num_classes,self.stage_num[1]))(feat_pred_s2)
-            
-
-            feat_delta_s3 = Lambda(lambda x: x[:,0:4])(input_s3_pre)
-            delta_s3 = Dense(self.num_classes,activation='tanh',name='delta_s3')(feat_delta_s3)
-
-            feat_local_s3 = Lambda(lambda x: x[:,4:8])(input_s3_pre)
-            local_s3 = Dense(units=self.num_classes, activation='tanh', name='local_delta_stage3')(feat_local_s3)
-
-            feat_pred_s3 = Lambda(lambda x: x[:,8:16])(input_s3_pre)
-            feat_pred_s3 = Dense(self.stage_num[2]*self.num_classes,activation='relu')(feat_pred_s3) 
-            pred_s3 = Reshape((self.num_classes,self.stage_num[2]))(feat_pred_s3)
-        
-            ssr_F_model = Model(inputs=[input_s1_pre,input_s2_pre,input_s3_pre],outputs=[pred_s1,pred_s2,pred_s3,delta_s1,delta_s2,delta_s3,local_s1,local_s2,local_s3], name=name_F)
-            return ssr_F_model
-        
-        ssr_F_model = ssr_F_model_build(self.F_shape,'ssr_F_model')
+        ssr_F_model = self.ssr_F_model_build(self.F_shape,'ssr_F_model')
         #-------------------------------------------------------------------------------------------------------------------------     
         ssr_G_list = ssr_G_model(img_inputs)
         ssr_primcaps = ssr_S_model(ssr_G_list)
@@ -1759,7 +1279,6 @@ class FSA_net_Var_Metric(BaseMetricFSANet):
 class FSA_net_noS_Metric(BaseMetricFSANet):
     def __init__(self, image_size,num_classes,stage_num,lambda_d, S_set):
         super(FSA_net_noS_Metric, self).__init__(image_size,num_classes,stage_num,lambda_d, S_set)
-
         
     def __call__(self):
         logging.debug("Creating model...")
@@ -1784,48 +1303,7 @@ class FSA_net_noS_Metric(BaseMetricFSANet):
         ssr_S_model = ssr_S_model_build()        
         #-------------------------------------------------------------------------------------------------------------------------
         ssr_Metric_model = self.ssr_Metric_model_build((self.num_primcaps,64))
-        #-------------------------------------------------------------------------------------------------------------------------
-        def ssr_F_model_build(feat_dim, name_F):
-            input_s1_pre = Input((feat_dim,))
-            input_s2_pre = Input((feat_dim,))
-            input_s3_pre = Input((feat_dim,))
-
-            feat_delta_s1 = Lambda(lambda x: x[:,0:4])(input_s1_pre)
-            delta_s1 = Dense(self.num_classes,activation='tanh',name='delta_s1')(feat_delta_s1)
-
-            feat_local_s1 = Lambda(lambda x: x[:,4:8])(input_s1_pre)
-            local_s1 = Dense(units=self.num_classes, activation='tanh', name='local_delta_stage1')(feat_local_s1)
-
-            feat_pred_s1 = Lambda(lambda x: x[:,8:16])(input_s1_pre)
-            feat_pred_s1 = Dense(self.stage_num[0]*self.num_classes,activation='relu')(feat_pred_s1) 
-            pred_s1 = Reshape((self.num_classes,self.stage_num[0]))(feat_pred_s1)
-            
-
-            feat_delta_s2 = Lambda(lambda x: x[:,0:4])(input_s2_pre)
-            delta_s2 = Dense(self.num_classes,activation='tanh',name='delta_s2')(feat_delta_s2)
-
-            feat_local_s2 = Lambda(lambda x: x[:,4:8])(input_s2_pre)
-            local_s2 = Dense(units=self.num_classes, activation='tanh', name='local_delta_stage2')(feat_local_s2)
-
-            feat_pred_s2 = Lambda(lambda x: x[:,8:16])(input_s2_pre)
-            feat_pred_s2 = Dense(self.stage_num[1]*self.num_classes,activation='relu')(feat_pred_s2) 
-            pred_s2 = Reshape((self.num_classes,self.stage_num[1]))(feat_pred_s2)
-            
-
-            feat_delta_s3 = Lambda(lambda x: x[:,0:4])(input_s3_pre)
-            delta_s3 = Dense(self.num_classes,activation='tanh',name='delta_s3')(feat_delta_s3)
-
-            feat_local_s3 = Lambda(lambda x: x[:,4:8])(input_s3_pre)
-            local_s3 = Dense(units=self.num_classes, activation='tanh', name='local_delta_stage3')(feat_local_s3)
-
-            feat_pred_s3 = Lambda(lambda x: x[:,8:16])(input_s3_pre)
-            feat_pred_s3 = Dense(self.stage_num[2]*self.num_classes,activation='relu')(feat_pred_s3) 
-            pred_s3 = Reshape((self.num_classes,self.stage_num[2]))(feat_pred_s3)
-        
-            ssr_F_model = Model(inputs=[input_s1_pre,input_s2_pre,input_s3_pre],outputs=[pred_s1,pred_s2,pred_s3,delta_s1,delta_s2,delta_s3,local_s1,local_s2,local_s3], name=name_F)
-            return ssr_F_model
-        
-        ssr_F_model = ssr_F_model_build(self.F_shape,'ssr_F_model')
+        ssr_F_model = self.ssr_F_model_build(self.F_shape,'ssr_F_model')
         #-------------------------------------------------------------------------------------------------------------------------    
         ssr_G_list = ssr_G_model(img_inputs)
         ssr_primcaps = ssr_S_model(ssr_G_list)
