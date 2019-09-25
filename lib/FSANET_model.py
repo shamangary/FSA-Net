@@ -5,24 +5,24 @@ import numpy as np
 import tensorflow as tf
 
 from keras.models import Model
-from keras.layers import *
-from keras.layers.convolutional import Conv2D, AveragePooling2D, MaxPooling2D, SeparableConv2D
-from keras.layers.normalization import BatchNormalization
-from keras.layers import GlobalAveragePooling2D, GlobalMaxPooling2D
-from keras.regularizers import l2
-from keras import backend as K
-from keras.optimizers import SGD,Adam
-from keras.applications.mobilenet import MobileNet
-from keras.utils import plot_model
-from keras.engine.topology import Layer
-from keras.layers.recurrent import *
-from keras.layers.wrappers import *
-from keras.layers.advanced_activations import PReLU
-from keras import activations, initializers, regularizers, constraints
 
-from .utils import get_initial_weights
-from .capsulelayers import *
-from .loupe_keras import *
+from keras.layers import Input
+from keras.layers import Dense
+from keras.layers import Conv2D
+from keras.layers import Lambda
+from keras.layers import Reshape
+from keras.layers import Multiply
+from keras.layers import Activation
+from keras.layers import Concatenate
+from keras.layers import MaxPooling2D
+from keras.layers import SeparableConv2D
+from keras.layers import AveragePooling2D
+from keras.layers import BatchNormalization
+
+from keras import backend as K
+
+from .capsulelayers import CapsuleLayer
+from .loupe_keras import NetVLAD
 
 sys.setrecursionlimit(2 ** 20)
 np.random.seed(2 ** 10)
