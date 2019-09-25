@@ -9,7 +9,10 @@ from math import cos, sin
 from moviepy.editor import *
 from lib.FSANET_model import *
 from mtcnn.mtcnn import MTCNN
+
 from keras import backend as K
+from keras.layers import Average
+from keras.models import Model
 
 
 def draw_axis(img, yaw, pitch, roll, tdx=None, tdy=None, size=80):
