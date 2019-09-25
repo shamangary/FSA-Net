@@ -224,6 +224,32 @@ class BaseNetVLADFSANet(BaseFSANet):
         ssr_Agg_model = Model(inputs=input_primcaps,outputs=[feat_s1_div,feat_s2_div,feat_s3_div], name='ssr_Agg_model')            
         return ssr_Agg_model 
 
+class BaseMetricFSANet(BaseFSANet):
+    def __init__(self, image_size,num_classes,stage_num,lambda_d, S_set):
+        super(BaseMetricFSANet, self).__init__(image_size,num_classes,stage_num,lambda_d, S_set) 
+
+    def ssr_Metric_model_build(self, shape_primcaps):
+        input_primcaps = Input(shape_primcaps)
+
+        metric_feat = MatMulLayer(16,type=1)(input_primcaps)
+        metric_feat = MatMulLayer(3,type=2)(metric_feat)
+
+        s1_a = 0
+        s1_b = self.num_capsule//3
+        feat_s1_div = Lambda(lambda x: x[:,s1_a:s1_b,:])(metric_feat)
+        s2_a = self.num_capsule//3
+        s2_b = 2*self.num_capsule//3
+        feat_s2_div = Lambda(lambda x: x[:,s2_a:s2_b,:])(metric_feat)
+        s3_a = 2*self.num_capsule//3
+        s3_b = self.num_capsule
+        feat_s3_div = Lambda(lambda x: x[:,s3_a:s3_b,:])(metric_feat)
+
+        feat_s1_div = Reshape((-1,))(feat_s1_div)
+        feat_s2_div = Reshape((-1,))(feat_s2_div)
+        feat_s3_div = Reshape((-1,))(feat_s3_div)
+        
+        ssr_Metric_model = Model(inputs=input_primcaps,outputs=[feat_s1_div,feat_s2_div,feat_s3_div], name='ssr_Metric_model')            
+        return ssr_Metric_model
 
 class FSA_net_Capsule(BaseCapsuleFSANet):
     def __init__(self, image_size,num_classes,stage_num,lambda_d, S_set):
@@ -1490,8 +1516,7 @@ class FSA_net_noS_NetVLAD_FC(BaseNetVLADFSANet):
         model = Model(inputs=img_inputs, outputs=pred_pose)
         return model
 
-
-class FSA_net_Metric(BaseFSANet):
+class FSA_net_Metric(BaseMetricFSANet):
     def __init__(self, image_size,num_classes,stage_num,lambda_d, S_set):
         super(FSA_net_Metric, self).__init__(image_size,num_classes,stage_num,lambda_d, S_set)
         
@@ -1555,33 +1580,7 @@ class FSA_net_Metric(BaseFSANet):
         
         ssr_S_model = ssr_S_model_build(self.num_primcaps,self.m_dim)        
         #-------------------------------------------------------------------------------------------------------------------------
-        def ssr_Metric_model_build(shape_primcaps):
-            input_primcaps = Input(shape_primcaps)
-
-            #capsule = CapsuleLayer(self.num_capsule, self.dim_capsule, self.routings, name='caps')(input_primcaps)
-            metric_feat = MatMulLayer(16,type=1)(input_primcaps)
-            metric_feat = MatMulLayer(3,type=2)(metric_feat)
-
-
-            s1_a = 0
-            s1_b = self.num_capsule//3
-            feat_s1_div = Lambda(lambda x: x[:,s1_a:s1_b,:])(metric_feat)
-            s2_a = self.num_capsule//3
-            s2_b = 2*self.num_capsule//3
-            feat_s2_div = Lambda(lambda x: x[:,s2_a:s2_b,:])(metric_feat)
-            s3_a = 2*self.num_capsule//3
-            s3_b = self.num_capsule
-            feat_s3_div = Lambda(lambda x: x[:,s3_a:s3_b,:])(metric_feat)
-
-
-            feat_s1_div = Reshape((-1,))(feat_s1_div)
-            feat_s2_div = Reshape((-1,))(feat_s2_div)
-            feat_s3_div = Reshape((-1,))(feat_s3_div)
-            
-            ssr_Metric_model = Model(inputs=input_primcaps,outputs=[feat_s1_div,feat_s2_div,feat_s3_div], name='ssr_Metric_model')            
-            return ssr_Metric_model
-
-        ssr_Metric_model = ssr_Metric_model_build((self.num_primcaps,64))
+        ssr_Metric_model = self.ssr_Metric_model_build((self.num_primcaps,64))
         #-------------------------------------------------------------------------------------------------------------------------
         def ssr_F_model_build(feat_dim, name_F):
             input_s1_pre = Input((feat_dim,))
@@ -1635,7 +1634,7 @@ class FSA_net_Metric(BaseFSANet):
         model = Model(inputs=img_inputs, outputs=pred_pose)
         return model
 
-class FSA_net_Var_Metric(BaseFSANet):
+class FSA_net_Var_Metric(BaseMetricFSANet):
     def __init__(self, image_size,num_classes,stage_num,lambda_d, S_set):
         super(FSA_net_Var_Metric, self).__init__(image_size,num_classes,stage_num,lambda_d, S_set)
 
@@ -1704,33 +1703,7 @@ class FSA_net_Var_Metric(BaseFSANet):
         
         ssr_S_model = ssr_S_model_build(self.num_primcaps,self.m_dim)        
         #-------------------------------------------------------------------------------------------------------------------------
-        def ssr_Metric_model_build(shape_primcaps):
-            input_primcaps = Input(shape_primcaps)
-
-            #capsule = CapsuleLayer(self.num_capsule, self.dim_capsule, self.routings, name='caps')(input_primcaps)
-            metric_feat = MatMulLayer(16,type=1)(input_primcaps)
-            metric_feat = MatMulLayer(3,type=2)(metric_feat)
-
-
-            s1_a = 0
-            s1_b = self.num_capsule//3
-            feat_s1_div = Lambda(lambda x: x[:,s1_a:s1_b,:])(metric_feat)
-            s2_a = self.num_capsule//3
-            s2_b = 2*self.num_capsule//3
-            feat_s2_div = Lambda(lambda x: x[:,s2_a:s2_b,:])(metric_feat)
-            s3_a = 2*self.num_capsule//3
-            s3_b = self.num_capsule
-            feat_s3_div = Lambda(lambda x: x[:,s3_a:s3_b,:])(metric_feat)
-
-
-            feat_s1_div = Reshape((-1,))(feat_s1_div)
-            feat_s2_div = Reshape((-1,))(feat_s2_div)
-            feat_s3_div = Reshape((-1,))(feat_s3_div)
-            
-            ssr_Metric_model = Model(inputs=input_primcaps,outputs=[feat_s1_div,feat_s2_div,feat_s3_div], name='ssr_Metric_model')            
-            return ssr_Metric_model
-
-        ssr_Metric_model = ssr_Metric_model_build((self.num_primcaps,64))
+        ssr_Metric_model = self.ssr_Metric_model_build((self.num_primcaps,64))
         #-------------------------------------------------------------------------------------------------------------------------
         def ssr_F_model_build(feat_dim, name_F):
             input_s1_pre = Input((feat_dim,))
@@ -1783,7 +1756,7 @@ class FSA_net_Var_Metric(BaseFSANet):
         model = Model(inputs=img_inputs, outputs=pred_pose)
         return model
         
-class FSA_net_noS_Metric(BaseFSANet):
+class FSA_net_noS_Metric(BaseMetricFSANet):
     def __init__(self, image_size,num_classes,stage_num,lambda_d, S_set):
         super(FSA_net_noS_Metric, self).__init__(image_size,num_classes,stage_num,lambda_d, S_set)
 
@@ -1810,33 +1783,7 @@ class FSA_net_noS_Metric(BaseFSANet):
         
         ssr_S_model = ssr_S_model_build()        
         #-------------------------------------------------------------------------------------------------------------------------
-        def ssr_Metric_model_build(shape_primcaps):
-            input_primcaps = Input(shape_primcaps)
-
-            #capsule = CapsuleLayer(self.num_capsule, self.dim_capsule, self.routings, name='caps')(input_primcaps)
-            metric_feat = MatMulLayer(16,type=1)(input_primcaps)
-            metric_feat = MatMulLayer(3,type=2)(metric_feat)
-
-
-            s1_a = 0
-            s1_b = self.num_capsule//3
-            feat_s1_div = Lambda(lambda x: x[:,s1_a:s1_b,:])(metric_feat)
-            s2_a = self.num_capsule//3
-            s2_b = 2*self.num_capsule//3
-            feat_s2_div = Lambda(lambda x: x[:,s2_a:s2_b,:])(metric_feat)
-            s3_a = 2*self.num_capsule//3
-            s3_b = self.num_capsule
-            feat_s3_div = Lambda(lambda x: x[:,s3_a:s3_b,:])(metric_feat)
-
-
-            feat_s1_div = Reshape((-1,))(feat_s1_div)
-            feat_s2_div = Reshape((-1,))(feat_s2_div)
-            feat_s3_div = Reshape((-1,))(feat_s3_div)
-            
-            ssr_Metric_model = Model(inputs=input_primcaps,outputs=[feat_s1_div,feat_s2_div,feat_s3_div], name='ssr_Metric_model')            
-            return ssr_Metric_model
-
-        ssr_Metric_model = ssr_Metric_model_build((self.num_primcaps,64))
+        ssr_Metric_model = self.ssr_Metric_model_build((self.num_primcaps,64))
         #-------------------------------------------------------------------------------------------------------------------------
         def ssr_F_model_build(feat_dim, name_F):
             input_s1_pre = Input((feat_dim,))
