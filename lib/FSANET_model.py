@@ -142,6 +142,34 @@ class BaseFSANet(object):
         ssr_G_model = Model(inputs=img_inputs,outputs=[feat_s1_pre,feat_s2_pre,feat_s3_pre], name='ssr_G_model')
         return ssr_G_model
 
+    def SSR_module(self, x,s1,s2,s3,lambda_d):
+        a = x[0][:,:,0]*0
+        b = x[0][:,:,0]*0
+        c = x[0][:,:,0]*0
+
+        di = s1//2
+        dj = s2//2
+        dk = s3//2
+
+        V = 99
+        #lambda_d = 0.9
+
+        for i in range(0,s1):
+            a = a+(i-di+x[6])*x[0][:,:,i]
+        a = a/(s1*(1+lambda_d*x[3]))
+
+        for j in range(0,s2):
+            b = b+(j-dj+x[7])*x[1][:,:,j]
+        b = b/(s1*(1+lambda_d*x[3]))/(s2*(1+lambda_d*x[4]))
+
+        for k in range(0,s3):
+            c = c+(k-dk+x[8])*x[2][:,:,k]
+        c = c/(s1*(1+lambda_d*x[3]))/(s2*(1+lambda_d*x[4]))/(s3*(1+lambda_d*x[5]))
+
+        pred = (a+b+c)*V
+        
+        return pred
+
 
 class FSA_net_Capsule(BaseFSANet):
     def __init__(self, image_size,num_classes,stage_num,lambda_d, S_set):
@@ -277,41 +305,13 @@ class FSA_net_Capsule(BaseFSANet):
         #ssr_F_model = ssr_F_model_build(21*64,'ssr_F_model')
         # ssr_F_Cap_model = ssr_F_model_build(int(self.dim_capsule/3)*self.num_capsule,'ssr_F_model_Cap')
         ssr_F_Cap_model = ssr_F_model_build(self.F_shape,'ssr_F_Cap_model')
-        #-------------------------------------------------------------------------------------------------------------------------
-
-        def SSR_module(x,s1,s2,s3,lambda_d):
-            a = x[0][:,:,0]*0
-            b = x[0][:,:,0]*0
-            c = x[0][:,:,0]*0
-
-            di = s1//2
-            dj = s2//2
-            dk = s3//2
-
-            V = 99
-            #lambda_d = 0.9
-
-            for i in range(0,s1):
-                a = a+(i-di+x[6])*x[0][:,:,i]
-            a = a/(s1*(1+lambda_d*x[3]))
-
-            for j in range(0,s2):
-                b = b+(j-dj+x[7])*x[1][:,:,j]
-            b = b/(s1*(1+lambda_d*x[3]))/(s2*(1+lambda_d*x[4]))
-
-            for k in range(0,s3):
-                c = c+(k-dk+x[8])*x[2][:,:,k]
-            c = c/(s1*(1+lambda_d*x[3]))/(s2*(1+lambda_d*x[4]))/(s3*(1+lambda_d*x[5]))
-
-            pred = (a+b+c)*V
-            
-            return pred
+        #-------------------------------------------------------------------------------------------------------------------------        
 
         ssr_G_list = ssr_G_model(img_inputs)
         ssr_primcaps = ssr_S_model(ssr_G_list)
         ssr_Cap_list = ssr_Cap_model(ssr_primcaps)
         ssr_F_Cap_list = ssr_F_Cap_model(ssr_Cap_list)
-        pred_pose = Lambda(SSR_module,arguments={'s1':self.stage_num[0],'s2':self.stage_num[1],'s3':self.stage_num[2],'lambda_d':self.lambda_d},name='pred_pose')(ssr_F_Cap_list)
+        pred_pose = Lambda(self.SSR_module,arguments={'s1':self.stage_num[0],'s2':self.stage_num[1],'s3':self.stage_num[2],'lambda_d':self.lambda_d},name='pred_pose')(ssr_F_Cap_list)
         
         model = Model(inputs=img_inputs, outputs=pred_pose)
         return model
@@ -456,44 +456,13 @@ class FSA_net_Var_Capsule(BaseFSANet):
         ssr_F_Cap_model = ssr_F_model_build(self.F_shape,'ssr_F_Cap_model')
         #-------------------------------------------------------------------------------------------------------------------------
 
-        def SSR_module(x,s1,s2,s3,lambda_d):
-            a = x[0][:,:,0]*0
-            b = x[0][:,:,0]*0
-            c = x[0][:,:,0]*0
-
-            di = s1//2
-            dj = s2//2
-            dk = s3//2
-
-            V = 99
-            #lambda_d = 0.9
-
-            for i in range(0,s1):
-                a = a+(i-di+x[6])*x[0][:,:,i]
-            a = a/(s1*(1+lambda_d*x[3]))
-
-            for j in range(0,s2):
-                b = b+(j-dj+x[7])*x[1][:,:,j]
-            b = b/(s1*(1+lambda_d*x[3]))/(s2*(1+lambda_d*x[4]))
-
-            for k in range(0,s3):
-                c = c+(k-dk+x[8])*x[2][:,:,k]
-            c = c/(s1*(1+lambda_d*x[3]))/(s2*(1+lambda_d*x[4]))/(s3*(1+lambda_d*x[5]))
-
-            pred = (a+b+c)*V
-            
-            return pred
-
         ssr_G_list = ssr_G_model(img_inputs)
         ssr_primcaps = ssr_S_model(ssr_G_list)
         ssr_Cap_list = ssr_Cap_model(ssr_primcaps)
         ssr_F_Cap_list = ssr_F_Cap_model(ssr_Cap_list)
-        pred_pose = Lambda(SSR_module,arguments={'s1':self.stage_num[0],'s2':self.stage_num[1],'s3':self.stage_num[2],'lambda_d':self.lambda_d},name='pred_pose')(ssr_F_Cap_list)
-        
+        pred_pose = Lambda(self.SSR_module,arguments={'s1':self.stage_num[0],'s2':self.stage_num[1],'s3':self.stage_num[2],'lambda_d':self.lambda_d},name='pred_pose')(ssr_F_Cap_list)
 
         model = Model(inputs=img_inputs, outputs=pred_pose)
-
-
         return model
 
 class FSA_net_noS_Capsule(BaseFSANet):
@@ -592,47 +561,14 @@ class FSA_net_noS_Capsule(BaseFSANet):
         ssr_F_Cap_model = ssr_F_model_build(self.F_shape,'ssr_F_Cap_model')
         #-------------------------------------------------------------------------------------------------------------------------
 
-        def SSR_module(x,s1,s2,s3,lambda_d):
-            a = x[0][:,:,0]*0
-            b = x[0][:,:,0]*0
-            c = x[0][:,:,0]*0
-
-            di = s1//2
-            dj = s2//2
-            dk = s3//2
-
-            V = 99
-            #lambda_d = 0.9
-
-            for i in range(0,s1):
-                a = a+(i-di+x[6])*x[0][:,:,i]
-            a = a/(s1*(1+lambda_d*x[3]))
-
-            for j in range(0,s2):
-                b = b+(j-dj+x[7])*x[1][:,:,j]
-            b = b/(s1*(1+lambda_d*x[3]))/(s2*(1+lambda_d*x[4]))
-
-            for k in range(0,s3):
-                c = c+(k-dk+x[8])*x[2][:,:,k]
-            c = c/(s1*(1+lambda_d*x[3]))/(s2*(1+lambda_d*x[4]))/(s3*(1+lambda_d*x[5]))
-
-            pred = (a+b+c)*V
-            
-            return pred
-
         ssr_G_list = ssr_G_model(img_inputs)
         ssr_primcaps = ssr_S_model(ssr_G_list)
         ssr_Cap_list = ssr_Cap_model(ssr_primcaps)
         ssr_F_Cap_list = ssr_F_Cap_model(ssr_Cap_list)
-        pred_pose = Lambda(SSR_module,arguments={'s1':self.stage_num[0],'s2':self.stage_num[1],'s3':self.stage_num[2],'lambda_d':self.lambda_d},name='pred_pose')(ssr_F_Cap_list)
-        
+        pred_pose = Lambda(self.SSR_module,arguments={'s1':self.stage_num[0],'s2':self.stage_num[1],'s3':self.stage_num[2],'lambda_d':self.lambda_d},name='pred_pose')(ssr_F_Cap_list)
 
         model = Model(inputs=img_inputs, outputs=pred_pose)
-
-
         return model
-
-
 
 class FSA_net_Capsule_FC(BaseFSANet):
     def __init__(self, image_size,num_classes,stage_num,lambda_d, S_set):
@@ -765,46 +701,15 @@ class FSA_net_Capsule_FC(BaseFSANet):
         # ssr_F_Cap_model = ssr_F_model_build(int(self.dim_capsule/3)*self.num_capsule,'ssr_F_model_Cap')
         ssr_F_Cap_model = ssr_F_model_build(self.F_shape,'ssr_F_Cap_model')
         #-------------------------------------------------------------------------------------------------------------------------
-
-        def SSR_module(x,s1,s2,s3,lambda_d):
-            a = x[0][:,:,0]*0
-            b = x[0][:,:,0]*0
-            c = x[0][:,:,0]*0
-
-            di = s1//2
-            dj = s2//2
-            dk = s3//2
-
-            V = 99
-            #lambda_d = 0.9
-
-            for i in range(0,s1):
-                a = a+(i-di+x[6])*x[0][:,:,i]
-            a = a/(s1*(1+lambda_d*x[3]))
-
-            for j in range(0,s2):
-                b = b+(j-dj+x[7])*x[1][:,:,j]
-            b = b/(s1*(1+lambda_d*x[3]))/(s2*(1+lambda_d*x[4]))
-
-            for k in range(0,s3):
-                c = c+(k-dk+x[8])*x[2][:,:,k]
-            c = c/(s1*(1+lambda_d*x[3]))/(s2*(1+lambda_d*x[4]))/(s3*(1+lambda_d*x[5]))
-
-            pred = (a+b+c)*V
-            
-            return pred
-
         ssr_G_list = ssr_G_model(img_inputs)
         ssr_primcaps = ssr_S_model(ssr_G_list)
         ssr_Cap_list = ssr_Cap_model(ssr_primcaps)
         ssr_F_Cap_list = ssr_F_Cap_model(ssr_Cap_list)
-        pred_pose = Lambda(SSR_module,arguments={'s1':self.stage_num[0],'s2':self.stage_num[1],'s3':self.stage_num[2],'lambda_d':self.lambda_d},name='pred_pose')(ssr_F_Cap_list)
+        pred_pose = Lambda(self.SSR_module,arguments={'s1':self.stage_num[0],'s2':self.stage_num[1],'s3':self.stage_num[2],'lambda_d':self.lambda_d},name='pred_pose')(ssr_F_Cap_list)
         
-
         model = Model(inputs=img_inputs, outputs=pred_pose)
-
-
         return model
+
 class FSA_net_Var_Capsule_FC(BaseFSANet):
     def __init__(self, image_size,num_classes,stage_num,lambda_d, S_set):
         super(FSA_net_Var_Capsule_FC, self).__init__(image_size,num_classes,stage_num,lambda_d, S_set)
@@ -941,45 +846,13 @@ class FSA_net_Var_Capsule_FC(BaseFSANet):
         # ssr_F_Cap_model = ssr_F_model_build(int(self.dim_capsule/3)*self.num_capsule,'ssr_F_model_Cap')
         ssr_F_Cap_model = ssr_F_model_build(self.F_shape,'ssr_F_Cap_model')
         #-------------------------------------------------------------------------------------------------------------------------
-
-        def SSR_module(x,s1,s2,s3,lambda_d):
-            a = x[0][:,:,0]*0
-            b = x[0][:,:,0]*0
-            c = x[0][:,:,0]*0
-
-            di = s1//2
-            dj = s2//2
-            dk = s3//2
-
-            V = 99
-            #lambda_d = 0.9
-
-            for i in range(0,s1):
-                a = a+(i-di+x[6])*x[0][:,:,i]
-            a = a/(s1*(1+lambda_d*x[3]))
-
-            for j in range(0,s2):
-                b = b+(j-dj+x[7])*x[1][:,:,j]
-            b = b/(s1*(1+lambda_d*x[3]))/(s2*(1+lambda_d*x[4]))
-
-            for k in range(0,s3):
-                c = c+(k-dk+x[8])*x[2][:,:,k]
-            c = c/(s1*(1+lambda_d*x[3]))/(s2*(1+lambda_d*x[4]))/(s3*(1+lambda_d*x[5]))
-
-            pred = (a+b+c)*V
-            
-            return pred
-
         ssr_G_list = ssr_G_model(img_inputs)
         ssr_primcaps = ssr_S_model(ssr_G_list)
         ssr_Cap_list = ssr_Cap_model(ssr_primcaps)
         ssr_F_Cap_list = ssr_F_Cap_model(ssr_Cap_list)
-        pred_pose = Lambda(SSR_module,arguments={'s1':self.stage_num[0],'s2':self.stage_num[1],'s3':self.stage_num[2],'lambda_d':self.lambda_d},name='pred_pose')(ssr_F_Cap_list)
+        pred_pose = Lambda(self.SSR_module,arguments={'s1':self.stage_num[0],'s2':self.stage_num[1],'s3':self.stage_num[2],'lambda_d':self.lambda_d},name='pred_pose')(ssr_F_Cap_list)
         
-
         model = Model(inputs=img_inputs, outputs=pred_pose)
-
-
         return model
 
 class FSA_net_noS_Capsule_FC(BaseFSANet):
@@ -1074,45 +947,13 @@ class FSA_net_noS_Capsule_FC(BaseFSANet):
         
         ssr_F_Cap_model = ssr_F_model_build(self.F_shape,'ssr_F_Cap_model')
         #-------------------------------------------------------------------------------------------------------------------------
-
-        def SSR_module(x,s1,s2,s3,lambda_d):
-            a = x[0][:,:,0]*0
-            b = x[0][:,:,0]*0
-            c = x[0][:,:,0]*0
-
-            di = s1//2
-            dj = s2//2
-            dk = s3//2
-
-            V = 99
-            #lambda_d = 0.9
-
-            for i in range(0,s1):
-                a = a+(i-di+x[6])*x[0][:,:,i]
-            a = a/(s1*(1+lambda_d*x[3]))
-
-            for j in range(0,s2):
-                b = b+(j-dj+x[7])*x[1][:,:,j]
-            b = b/(s1*(1+lambda_d*x[3]))/(s2*(1+lambda_d*x[4]))
-
-            for k in range(0,s3):
-                c = c+(k-dk+x[8])*x[2][:,:,k]
-            c = c/(s1*(1+lambda_d*x[3]))/(s2*(1+lambda_d*x[4]))/(s3*(1+lambda_d*x[5]))
-
-            pred = (a+b+c)*V
-            
-            return pred
-
         ssr_G_list = ssr_G_model(img_inputs)
         ssr_primcaps = ssr_S_model(ssr_G_list)
         ssr_Cap_list = ssr_Cap_model(ssr_primcaps)
         ssr_F_Cap_list = ssr_F_Cap_model(ssr_Cap_list)
-        pred_pose = Lambda(SSR_module,arguments={'s1':self.stage_num[0],'s2':self.stage_num[1],'s3':self.stage_num[2],'lambda_d':self.lambda_d},name='pred_pose')(ssr_F_Cap_list)
+        pred_pose = Lambda(self.SSR_module,arguments={'s1':self.stage_num[0],'s2':self.stage_num[1],'s3':self.stage_num[2],'lambda_d':self.lambda_d},name='pred_pose')(ssr_F_Cap_list)
         
-
         model = Model(inputs=img_inputs, outputs=pred_pose)
-
-
         return model
 
 
@@ -1249,45 +1090,14 @@ class FSA_net_NetVLAD(BaseFSANet):
         
         ssr_F_model = ssr_F_model_build(self.F_shape,'ssr_F_model')
         #-------------------------------------------------------------------------------------------------------------------------
-
-        def SSR_module(x,s1,s2,s3,lambda_d):
-            a = x[0][:,:,0]*0
-            b = x[0][:,:,0]*0
-            c = x[0][:,:,0]*0
-
-            di = s1//2
-            dj = s2//2
-            dk = s3//2
-
-            V = 99
-            #lambda_d = 0.9
-
-            for i in range(0,s1):
-                a = a+(i-di+x[6])*x[0][:,:,i]
-            a = a/(s1*(1+lambda_d*x[3]))
-
-            for j in range(0,s2):
-                b = b+(j-dj+x[7])*x[1][:,:,j]
-            b = b/(s1*(1+lambda_d*x[3]))/(s2*(1+lambda_d*x[4]))
-
-            for k in range(0,s3):
-                c = c+(k-dk+x[8])*x[2][:,:,k]
-            c = c/(s1*(1+lambda_d*x[3]))/(s2*(1+lambda_d*x[4]))/(s3*(1+lambda_d*x[5]))
-
-            pred = (a+b+c)*V
-            
-            return pred
-
         ssr_G_list = ssr_G_model(img_inputs)
         ssr_primcaps = ssr_S_model(ssr_G_list)
         ssr_Agg_list = ssr_Agg_model(ssr_primcaps)
         ssr_F_list = ssr_F_model(ssr_Agg_list)
-        pred_pose = Lambda(SSR_module,arguments={'s1':self.stage_num[0],'s2':self.stage_num[1],'s3':self.stage_num[2],'lambda_d':self.lambda_d},name='pred_pose')(ssr_F_list)
+        pred_pose = Lambda(self.SSR_module,arguments={'s1':self.stage_num[0],'s2':self.stage_num[1],'s3':self.stage_num[2],'lambda_d':self.lambda_d},name='pred_pose')(ssr_F_list)
         
 
         model = Model(inputs=img_inputs, outputs=pred_pose)
-
-
         return model
 
 class FSA_net_Var_NetVLAD(BaseFSANet):
@@ -1427,45 +1237,13 @@ class FSA_net_Var_NetVLAD(BaseFSANet):
         
         ssr_F_model = ssr_F_model_build(self.F_shape,'ssr_F_model')
         #-------------------------------------------------------------------------------------------------------------------------
-
-        def SSR_module(x,s1,s2,s3,lambda_d):
-            a = x[0][:,:,0]*0
-            b = x[0][:,:,0]*0
-            c = x[0][:,:,0]*0
-
-            di = s1//2
-            dj = s2//2
-            dk = s3//2
-
-            V = 99
-            #lambda_d = 0.9
-
-            for i in range(0,s1):
-                a = a+(i-di+x[6])*x[0][:,:,i]
-            a = a/(s1*(1+lambda_d*x[3]))
-
-            for j in range(0,s2):
-                b = b+(j-dj+x[7])*x[1][:,:,j]
-            b = b/(s1*(1+lambda_d*x[3]))/(s2*(1+lambda_d*x[4]))
-
-            for k in range(0,s3):
-                c = c+(k-dk+x[8])*x[2][:,:,k]
-            c = c/(s1*(1+lambda_d*x[3]))/(s2*(1+lambda_d*x[4]))/(s3*(1+lambda_d*x[5]))
-
-            pred = (a+b+c)*V
-            
-            return pred
-
         ssr_G_list = ssr_G_model(img_inputs)
         ssr_primcaps = ssr_S_model(ssr_G_list)
         ssr_Agg_list = ssr_Agg_model(ssr_primcaps)
         ssr_F_list = ssr_F_model(ssr_Agg_list)
-        pred_pose = Lambda(SSR_module,arguments={'s1':self.stage_num[0],'s2':self.stage_num[1],'s3':self.stage_num[2],'lambda_d':self.lambda_d},name='pred_pose')(ssr_F_list)
-        
+        pred_pose = Lambda(self.SSR_module,arguments={'s1':self.stage_num[0],'s2':self.stage_num[1],'s3':self.stage_num[2],'lambda_d':self.lambda_d},name='pred_pose')(ssr_F_list)        
 
         model = Model(inputs=img_inputs, outputs=pred_pose)
-
-
         return model
 
 class FSA_net_noS_NetVLAD(BaseFSANet):
@@ -1563,47 +1341,14 @@ class FSA_net_noS_NetVLAD(BaseFSANet):
         
         ssr_F_model = ssr_F_model_build(self.F_shape,'ssr_F_model')
         #-------------------------------------------------------------------------------------------------------------------------
-
-        def SSR_module(x,s1,s2,s3,lambda_d):
-            a = x[0][:,:,0]*0
-            b = x[0][:,:,0]*0
-            c = x[0][:,:,0]*0
-
-            di = s1//2
-            dj = s2//2
-            dk = s3//2
-
-            V = 99
-            #lambda_d = 0.9
-
-            for i in range(0,s1):
-                a = a+(i-di+x[6])*x[0][:,:,i]
-            a = a/(s1*(1+lambda_d*x[3]))
-
-            for j in range(0,s2):
-                b = b+(j-dj+x[7])*x[1][:,:,j]
-            b = b/(s1*(1+lambda_d*x[3]))/(s2*(1+lambda_d*x[4]))
-
-            for k in range(0,s3):
-                c = c+(k-dk+x[8])*x[2][:,:,k]
-            c = c/(s1*(1+lambda_d*x[3]))/(s2*(1+lambda_d*x[4]))/(s3*(1+lambda_d*x[5]))
-
-            pred = (a+b+c)*V
-            
-            return pred
-
         ssr_G_list = ssr_G_model(img_inputs)
         ssr_primcaps = ssr_S_model(ssr_G_list)
         ssr_Agg_list = ssr_Agg_model(ssr_primcaps)
         ssr_F_list = ssr_F_model(ssr_Agg_list)
-        pred_pose = Lambda(SSR_module,arguments={'s1':self.stage_num[0],'s2':self.stage_num[1],'s3':self.stage_num[2],'lambda_d':self.lambda_d},name='pred_pose')(ssr_F_list)
-        
+        pred_pose = Lambda(self.SSR_module,arguments={'s1':self.stage_num[0],'s2':self.stage_num[1],'s3':self.stage_num[2],'lambda_d':self.lambda_d},name='pred_pose')(ssr_F_list)        
 
         model = Model(inputs=img_inputs, outputs=pred_pose)
-
-
         return model
-
 
 class FSA_net_NetVLAD_FC(BaseFSANet):
     def __init__(self, image_size,num_classes,stage_num,lambda_d, S_set):
@@ -1734,46 +1479,14 @@ class FSA_net_NetVLAD_FC(BaseFSANet):
             return ssr_F_model
         
         ssr_F_model = ssr_F_model_build(self.F_shape,'ssr_F_model')
-        #-------------------------------------------------------------------------------------------------------------------------
-
-        def SSR_module(x,s1,s2,s3,lambda_d):
-            a = x[0][:,:,0]*0
-            b = x[0][:,:,0]*0
-            c = x[0][:,:,0]*0
-
-            di = s1//2
-            dj = s2//2
-            dk = s3//2
-
-            V = 99
-            #lambda_d = 0.9
-
-            for i in range(0,s1):
-                a = a+(i-di+x[6])*x[0][:,:,i]
-            a = a/(s1*(1+lambda_d*x[3]))
-
-            for j in range(0,s2):
-                b = b+(j-dj+x[7])*x[1][:,:,j]
-            b = b/(s1*(1+lambda_d*x[3]))/(s2*(1+lambda_d*x[4]))
-
-            for k in range(0,s3):
-                c = c+(k-dk+x[8])*x[2][:,:,k]
-            c = c/(s1*(1+lambda_d*x[3]))/(s2*(1+lambda_d*x[4]))/(s3*(1+lambda_d*x[5]))
-
-            pred = (a+b+c)*V
-            
-            return pred
-
+        #-------------------------------------------------------------------------------------------------------------------------     
         ssr_G_list = ssr_G_model(img_inputs)
         ssr_primcaps = ssr_S_model(ssr_G_list)
         ssr_Agg_list = ssr_Agg_model(ssr_primcaps)
         ssr_F_list = ssr_F_model(ssr_Agg_list)
-        pred_pose = Lambda(SSR_module,arguments={'s1':self.stage_num[0],'s2':self.stage_num[1],'s3':self.stage_num[2],'lambda_d':self.lambda_d},name='pred_pose')(ssr_F_list)
-        
+        pred_pose = Lambda(self.SSR_module,arguments={'s1':self.stage_num[0],'s2':self.stage_num[1],'s3':self.stage_num[2],'lambda_d':self.lambda_d},name='pred_pose')(ssr_F_list)        
 
         model = Model(inputs=img_inputs, outputs=pred_pose)
-
-
         return model
 
 class FSA_net_Var_NetVLAD_FC(BaseFSANet):
@@ -1910,46 +1623,14 @@ class FSA_net_Var_NetVLAD_FC(BaseFSANet):
             return ssr_F_model
         
         ssr_F_model = ssr_F_model_build(self.F_shape,'ssr_F_model')
-        #-------------------------------------------------------------------------------------------------------------------------
-
-        def SSR_module(x,s1,s2,s3,lambda_d):
-            a = x[0][:,:,0]*0
-            b = x[0][:,:,0]*0
-            c = x[0][:,:,0]*0
-
-            di = s1//2
-            dj = s2//2
-            dk = s3//2
-
-            V = 99
-            #lambda_d = 0.9
-
-            for i in range(0,s1):
-                a = a+(i-di+x[6])*x[0][:,:,i]
-            a = a/(s1*(1+lambda_d*x[3]))
-
-            for j in range(0,s2):
-                b = b+(j-dj+x[7])*x[1][:,:,j]
-            b = b/(s1*(1+lambda_d*x[3]))/(s2*(1+lambda_d*x[4]))
-
-            for k in range(0,s3):
-                c = c+(k-dk+x[8])*x[2][:,:,k]
-            c = c/(s1*(1+lambda_d*x[3]))/(s2*(1+lambda_d*x[4]))/(s3*(1+lambda_d*x[5]))
-
-            pred = (a+b+c)*V
-            
-            return pred
-
+        #-------------------------------------------------------------------------------------------------------------------------    
         ssr_G_list = ssr_G_model(img_inputs)
         ssr_primcaps = ssr_S_model(ssr_G_list)
         ssr_Agg_list = ssr_Agg_model(ssr_primcaps)
         ssr_F_list = ssr_F_model(ssr_Agg_list)
-        pred_pose = Lambda(SSR_module,arguments={'s1':self.stage_num[0],'s2':self.stage_num[1],'s3':self.stage_num[2],'lambda_d':self.lambda_d},name='pred_pose')(ssr_F_list)
-        
+        pred_pose = Lambda(self.SSR_module,arguments={'s1':self.stage_num[0],'s2':self.stage_num[1],'s3':self.stage_num[2],'lambda_d':self.lambda_d},name='pred_pose')(ssr_F_list)        
 
         model = Model(inputs=img_inputs, outputs=pred_pose)
-
-
         return model
 
 class FSA_net_noS_NetVLAD_FC(BaseFSANet):
@@ -2045,44 +1726,13 @@ class FSA_net_noS_NetVLAD_FC(BaseFSANet):
         ssr_F_model = ssr_F_model_build(self.F_shape,'ssr_F_model')
         #-------------------------------------------------------------------------------------------------------------------------
 
-        def SSR_module(x,s1,s2,s3,lambda_d):
-            a = x[0][:,:,0]*0
-            b = x[0][:,:,0]*0
-            c = x[0][:,:,0]*0
-
-            di = s1//2
-            dj = s2//2
-            dk = s3//2
-
-            V = 99
-            #lambda_d = 0.9
-
-            for i in range(0,s1):
-                a = a+(i-di+x[6])*x[0][:,:,i]
-            a = a/(s1*(1+lambda_d*x[3]))
-
-            for j in range(0,s2):
-                b = b+(j-dj+x[7])*x[1][:,:,j]
-            b = b/(s1*(1+lambda_d*x[3]))/(s2*(1+lambda_d*x[4]))
-
-            for k in range(0,s3):
-                c = c+(k-dk+x[8])*x[2][:,:,k]
-            c = c/(s1*(1+lambda_d*x[3]))/(s2*(1+lambda_d*x[4]))/(s3*(1+lambda_d*x[5]))
-
-            pred = (a+b+c)*V
-            
-            return pred
-
         ssr_G_list = ssr_G_model(img_inputs)
         ssr_primcaps = ssr_S_model(ssr_G_list)
         ssr_Agg_list = ssr_Agg_model(ssr_primcaps)
         ssr_F_list = ssr_F_model(ssr_Agg_list)
-        pred_pose = Lambda(SSR_module,arguments={'s1':self.stage_num[0],'s2':self.stage_num[1],'s3':self.stage_num[2],'lambda_d':self.lambda_d},name='pred_pose')(ssr_F_list)
+        pred_pose = Lambda(self.SSR_module,arguments={'s1':self.stage_num[0],'s2':self.stage_num[1],'s3':self.stage_num[2],'lambda_d':self.lambda_d},name='pred_pose')(ssr_F_list)
         
-
         model = Model(inputs=img_inputs, outputs=pred_pose)
-
-
         return model
 
 
@@ -2222,44 +1872,13 @@ class FSA_net_Metric(BaseFSANet):
         ssr_F_model = ssr_F_model_build(self.F_shape,'ssr_F_model')
         #-------------------------------------------------------------------------------------------------------------------------
 
-        def SSR_module(x,s1,s2,s3,lambda_d):
-            a = x[0][:,:,0]*0
-            b = x[0][:,:,0]*0
-            c = x[0][:,:,0]*0
-
-            di = s1//2
-            dj = s2//2
-            dk = s3//2
-
-            V = 99
-            #lambda_d = 0.9
-
-            for i in range(0,s1):
-                a = a+(i-di+x[6])*x[0][:,:,i]
-            a = a/(s1*(1+lambda_d*x[3]))
-
-            for j in range(0,s2):
-                b = b+(j-dj+x[7])*x[1][:,:,j]
-            b = b/(s1*(1+lambda_d*x[3]))/(s2*(1+lambda_d*x[4]))
-
-            for k in range(0,s3):
-                c = c+(k-dk+x[8])*x[2][:,:,k]
-            c = c/(s1*(1+lambda_d*x[3]))/(s2*(1+lambda_d*x[4]))/(s3*(1+lambda_d*x[5]))
-
-            pred = (a+b+c)*V
-            
-            return pred
-
         ssr_G_list = ssr_G_model(img_inputs)
         ssr_primcaps = ssr_S_model(ssr_G_list)
         ssr_Metric_list = ssr_Metric_model(ssr_primcaps)
         ssr_F_list = ssr_F_model(ssr_Metric_list)
-        pred_pose = Lambda(SSR_module,arguments={'s1':self.stage_num[0],'s2':self.stage_num[1],'s3':self.stage_num[2],'lambda_d':self.lambda_d},name='pred_pose')(ssr_F_list)
-        
-
+        pred_pose = Lambda(self.SSR_module,arguments={'s1':self.stage_num[0],'s2':self.stage_num[1],'s3':self.stage_num[2],'lambda_d':self.lambda_d},name='pred_pose')(ssr_F_list)
+       
         model = Model(inputs=img_inputs, outputs=pred_pose)
-
-
         return model
 
 class FSA_net_Var_Metric(BaseFSANet):
@@ -2400,47 +2019,14 @@ class FSA_net_Var_Metric(BaseFSANet):
             return ssr_F_model
         
         ssr_F_model = ssr_F_model_build(self.F_shape,'ssr_F_model')
-        #-------------------------------------------------------------------------------------------------------------------------
-
-        def SSR_module(x,s1,s2,s3,lambda_d):
-            a = x[0][:,:,0]*0
-            b = x[0][:,:,0]*0
-            c = x[0][:,:,0]*0
-
-            di = s1//2
-            dj = s2//2
-            dk = s3//2
-
-            V = 99
-            #lambda_d = 0.9
-
-            for i in range(0,s1):
-                a = a+(i-di+x[6])*x[0][:,:,i]
-            a = a/(s1*(1+lambda_d*x[3]))
-
-            for j in range(0,s2):
-                b = b+(j-dj+x[7])*x[1][:,:,j]
-            b = b/(s1*(1+lambda_d*x[3]))/(s2*(1+lambda_d*x[4]))
-
-            for k in range(0,s3):
-                c = c+(k-dk+x[8])*x[2][:,:,k]
-            c = c/(s1*(1+lambda_d*x[3]))/(s2*(1+lambda_d*x[4]))/(s3*(1+lambda_d*x[5]))
-
-            pred = (a+b+c)*V
-            
-            return pred
-
+        #-------------------------------------------------------------------------------------------------------------------------     
         ssr_G_list = ssr_G_model(img_inputs)
         ssr_primcaps = ssr_S_model(ssr_G_list)
         ssr_Metric_list = ssr_Metric_model(ssr_primcaps)
         ssr_F_list = ssr_F_model(ssr_Metric_list)
-        pred_pose = Lambda(SSR_module,arguments={'s1':self.stage_num[0],'s2':self.stage_num[1],'s3':self.stage_num[2],'lambda_d':self.lambda_d},name='pred_pose')(ssr_F_list)
-        
-
+        pred_pose = Lambda(self.SSR_module,arguments={'s1':self.stage_num[0],'s2':self.stage_num[1],'s3':self.stage_num[2],'lambda_d':self.lambda_d},name='pred_pose')(ssr_F_list)       
 
         model = Model(inputs=img_inputs, outputs=pred_pose)
-
-
         return model
         
 class FSA_net_noS_Metric(BaseFSANet):
@@ -2539,42 +2125,12 @@ class FSA_net_noS_Metric(BaseFSANet):
             return ssr_F_model
         
         ssr_F_model = ssr_F_model_build(self.F_shape,'ssr_F_model')
-        #-------------------------------------------------------------------------------------------------------------------------
-
-        def SSR_module(x,s1,s2,s3,lambda_d):
-            a = x[0][:,:,0]*0
-            b = x[0][:,:,0]*0
-            c = x[0][:,:,0]*0
-
-            di = s1//2
-            dj = s2//2
-            dk = s3//2
-
-            V = 99
-            #lambda_d = 0.9
-
-            for i in range(0,s1):
-                a = a+(i-di+x[6])*x[0][:,:,i]
-            a = a/(s1*(1+lambda_d*x[3]))
-
-            for j in range(0,s2):
-                b = b+(j-dj+x[7])*x[1][:,:,j]
-            b = b/(s1*(1+lambda_d*x[3]))/(s2*(1+lambda_d*x[4]))
-
-            for k in range(0,s3):
-                c = c+(k-dk+x[8])*x[2][:,:,k]
-            c = c/(s1*(1+lambda_d*x[3]))/(s2*(1+lambda_d*x[4]))/(s3*(1+lambda_d*x[5]))
-
-            pred = (a+b+c)*V
-            
-            return pred
-
+        #-------------------------------------------------------------------------------------------------------------------------    
         ssr_G_list = ssr_G_model(img_inputs)
         ssr_primcaps = ssr_S_model(ssr_G_list)
         ssr_Metric_list = ssr_Metric_model(ssr_primcaps)
         ssr_F_list = ssr_F_model(ssr_Metric_list)
-        pred_pose = Lambda(SSR_module,arguments={'s1':self.stage_num[0],'s2':self.stage_num[1],'s3':self.stage_num[2],'lambda_d':self.lambda_d},name='pred_pose')(ssr_F_list)       
-
+        pred_pose = Lambda(self.SSR_module,arguments={'s1':self.stage_num[0],'s2':self.stage_num[1],'s3':self.stage_num[2],'lambda_d':self.lambda_d},name='pred_pose')(ssr_F_list)       
 
         model = Model(inputs=img_inputs, outputs=pred_pose)
         return model
