@@ -241,6 +241,33 @@ class BaseFSANet(object):
         primcaps = Concatenate(axis=1)([primcaps_s1,primcaps_s2,primcaps_s3])
         return Model(inputs=[input_s1_preS, input_s2_preS, input_s3_preS],outputs=primcaps, name='ssr_S_model')
 
+    def __call__(self):
+        logging.debug("Creating model...")
+        img_inputs = Input(self._input_shape)        
+
+        # Build various models
+        ssr_G_model = self.ssr_G_model_build(img_inputs)        
+        
+        if self.is_noS_model:
+            ssr_S_model = self.ssr_noS_model_build()           
+        else:
+            ssr_S_model = self.ssr_S_model_build(num_primcaps=self.num_primcaps,m_dim=self.m_dim)           
+
+        ssr_aggregation_model = self.ssr_aggregation_model_build((self.num_primcaps,64))
+
+        if self.is_fc_model:
+            ssr_F_Cap_model = self.ssr_FC_model_build(self.F_shape,'ssr_F_Cap_model')
+        else:    
+            ssr_F_Cap_model = self.ssr_F_model_build(self.F_shape,'ssr_F_Cap_model')
+
+        # Wire them up
+        ssr_G_list = ssr_G_model(img_inputs)
+        ssr_primcaps = ssr_S_model(ssr_G_list)
+        ssr_Cap_list = ssr_aggregation_model(ssr_primcaps)
+        ssr_F_Cap_list = ssr_F_Cap_model(ssr_Cap_list)
+        pred_pose = Lambda(self.SSR_module,arguments={'s1':self.stage_num[0],'s2':self.stage_num[1],'s3':self.stage_num[2],'lambda_d':self.lambda_d},name='pred_pose')(ssr_F_Cap_list)
+        
+        return Model(inputs=img_inputs, outputs=pred_pose)
 
 # Capsule FSANetworks
 
@@ -248,7 +275,7 @@ class BaseCapsuleFSANet(BaseFSANet):
     def __init__(self, image_size,num_classes,stage_num,lambda_d, S_set):
         super(BaseCapsuleFSANet, self).__init__(image_size,num_classes,stage_num,lambda_d, S_set)         
 
-    def ssr_Cap_model_build(self, shape_primcaps):
+    def ssr_aggregation_model_build(self, shape_primcaps):
         input_primcaps = Input(shape_primcaps)
         capsule = CapsuleLayer(self.num_capsule, self.dim_capsule, self.routings, name='caps')(input_primcaps)
 
@@ -266,35 +293,8 @@ class BaseCapsuleFSANet(BaseFSANet):
         feat_s2_div = Reshape((-1,))(feat_s2_div)
         feat_s3_div = Reshape((-1,))(feat_s3_div)
         
-        return Model(inputs=input_primcaps,outputs=[feat_s1_div,feat_s2_div,feat_s3_div], name='ssr_Cap_model') 
+        return Model(inputs=input_primcaps,outputs=[feat_s1_div,feat_s2_div,feat_s3_div], name='ssr_Cap_model')     
     
-    def __call__(self):
-        logging.debug("Creating model...")
-        img_inputs = Input(self._input_shape)        
-
-        # Build various models
-        ssr_G_model = self.ssr_G_model_build(img_inputs)        
-        
-        if self.is_noS_model:
-            ssr_S_model = self.ssr_noS_model_build()           
-        else:
-            ssr_S_model = self.ssr_S_model_build(num_primcaps=self.num_primcaps,m_dim=self.m_dim)           
-
-        ssr_Cap_model = self.ssr_Cap_model_build((self.num_primcaps,64))
-
-        if self.is_fc_model:
-            ssr_F_Cap_model = self.ssr_FC_model_build(self.F_shape,'ssr_F_Cap_model')
-        else:    
-            ssr_F_Cap_model = self.ssr_F_model_build(self.F_shape,'ssr_F_Cap_model')
-
-        # Wire them up
-        ssr_G_list = ssr_G_model(img_inputs)
-        ssr_primcaps = ssr_S_model(ssr_G_list)
-        ssr_Cap_list = ssr_Cap_model(ssr_primcaps)
-        ssr_F_Cap_list = ssr_F_Cap_model(ssr_Cap_list)
-        pred_pose = Lambda(self.SSR_module,arguments={'s1':self.stage_num[0],'s2':self.stage_num[1],'s3':self.stage_num[2],'lambda_d':self.lambda_d},name='pred_pose')(ssr_F_Cap_list)
-        
-        return Model(inputs=img_inputs, outputs=pred_pose)
 
 class FSA_net_Capsule(BaseCapsuleFSANet):
     def __init__(self, image_size,num_classes,stage_num,lambda_d, S_set):
@@ -351,7 +351,7 @@ class BaseNetVLADFSANet(BaseFSANet):
     def __init__(self, image_size,num_classes,stage_num,lambda_d, S_set):
         super(BaseNetVLADFSANet, self).__init__(image_size,num_classes,stage_num,lambda_d, S_set)         
 
-    def ssr_Agg_model_build(self, shape_primcaps):
+    def ssr_aggregation_model_build(self, shape_primcaps):
         input_primcaps = Input(shape_primcaps)
         
         agg_feat = NetVLAD(feature_size=64, max_samples=self.num_primcaps, cluster_size=self.num_capsule, output_dim=self.num_capsule*self.dim_capsule)(input_primcaps)
@@ -371,33 +371,7 @@ class BaseNetVLADFSANet(BaseFSANet):
         feat_s2_div = Reshape((-1,))(feat_s2_div)
         feat_s3_div = Reshape((-1,))(feat_s3_div)
         
-        return Model(inputs=input_primcaps,outputs=[feat_s1_div,feat_s2_div,feat_s3_div], name='ssr_Agg_model')      
-
-    def __call__(self):
-        logging.debug("Creating model...")
-
-        img_inputs = Input(self._input_shape)
-        ssr_G_model = self.ssr_G_model_build(img_inputs)        
-        
-        if self.is_noS_model:
-            ssr_S_model = self.ssr_noS_model_build()           
-        else:
-            ssr_S_model = self.ssr_S_model_build(num_primcaps=self.num_primcaps,m_dim=self.m_dim)           
-
-        ssr_Agg_model = self.ssr_Agg_model_build((self.num_primcaps,64))
-
-        if self.is_fc_model:
-            ssr_F_model  =self.ssr_FC_model_build(self.F_shape,'ssr_F_model')
-        else:
-            ssr_F_model = self.ssr_F_model_build(self.F_shape,'ssr_F_model')
-        
-        ssr_G_list = ssr_G_model(img_inputs)
-        ssr_primcaps = ssr_S_model(ssr_G_list)
-        ssr_Agg_list = ssr_Agg_model(ssr_primcaps)
-        ssr_F_list = ssr_F_model(ssr_Agg_list)
-        pred_pose = Lambda(self.SSR_module,arguments={'s1':self.stage_num[0],'s2':self.stage_num[1],'s3':self.stage_num[2],'lambda_d':self.lambda_d},name='pred_pose')(ssr_F_list)
-
-        return Model(inputs=img_inputs, outputs=pred_pose)          
+        return Model(inputs=input_primcaps,outputs=[feat_s1_div,feat_s2_div,feat_s3_div], name='ssr_Agg_model')                
 
 class FSA_net_NetVLAD(BaseNetVLADFSANet):
     def __init__(self, image_size,num_classes,stage_num,lambda_d, S_set):
@@ -457,7 +431,7 @@ class BaseMetricFSANet(BaseFSANet):
     def __init__(self, image_size,num_classes,stage_num,lambda_d, S_set):
         super(BaseMetricFSANet, self).__init__(image_size,num_classes,stage_num,lambda_d, S_set) 
         
-    def ssr_Metric_model_build(self, shape_primcaps):
+    def ssr_aggregation_model_build(self, shape_primcaps):
         input_primcaps = Input(shape_primcaps)
 
         metric_feat = MatMulLayer(16,type=1)(input_primcaps)
@@ -478,31 +452,7 @@ class BaseMetricFSANet(BaseFSANet):
         feat_s3_div = Reshape((-1,))(feat_s3_div)
         
         return Model(inputs=input_primcaps,outputs=[feat_s1_div,feat_s2_div,feat_s3_div], name='ssr_Metric_model')     
-
-    def __call__(self):
-        logging.debug("Creating model...")
-        
-        # build models
-        img_inputs = Input(self._input_shape)
-        ssr_G_model = self.ssr_G_model_build(img_inputs)
-        
-        if self.is_noS_model:
-            ssr_S_model = self.ssr_noS_model_build()           
-        else:
-            ssr_S_model = self.ssr_S_model_build(num_primcaps=self.num_primcaps,m_dim=self.m_dim)           
-
-        ssr_Metric_model = self.ssr_Metric_model_build((self.num_primcaps,64))
-        ssr_F_model = self.ssr_F_model_build(self.F_shape,'ssr_F_model')
-        
-        # wire models
-        ssr_G_list = ssr_G_model(img_inputs)
-        ssr_primcaps = ssr_S_model(ssr_G_list)
-        ssr_Metric_list = ssr_Metric_model(ssr_primcaps)
-        ssr_F_list = ssr_F_model(ssr_Metric_list)
-        pred_pose = Lambda(self.SSR_module,arguments={'s1':self.stage_num[0],'s2':self.stage_num[1],'s3':self.stage_num[2],'lambda_d':self.lambda_d},name='pred_pose')(ssr_F_list)
-       
-        return Model(inputs=img_inputs, outputs=pred_pose)
-
+    
 class FSA_net_Metric(BaseMetricFSANet):
     def __init__(self, image_size,num_classes,stage_num,lambda_d, S_set):
         super(FSA_net_Metric, self).__init__(image_size,num_classes,stage_num,lambda_d, S_set)
