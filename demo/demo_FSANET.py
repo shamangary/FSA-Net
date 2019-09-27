@@ -10,6 +10,7 @@ from math import cos, sin
 from lib.FSANET_model import *
 # from moviepy.editor import *
 from keras import backend as K
+from keras.layers import Average
 
 def draw_axis(img, yaw, pitch, roll, tdx=None, tdy=None, size = 80):
 
