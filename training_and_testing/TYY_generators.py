@@ -1,42 +1,42 @@
 import keras
 import numpy as np
 import sys
-from scipy import misc
 import tensorflow as tf
 
 
 def random_crop(x,dn):
     dx = np.random.randint(dn,size=1)[0]
     dy = np.random.randint(dn,size=1)[0]
-    w = x.shape[0]
-    h = x.shape[1]
-    out = x[0+dx:w-(dn-dx),0+dy:h-(dn-dy),:]
-    out = misc.imresize(out, (w,h), interp='nearest')
+    h = x.shape[0]
+    w = x.shape[1]
+    out = x[0+dy:h-(dn-dy),0+dx:w-(dn-dx),:]
+    out = cv2.resize(out, (h,w), interpolation=cv2.INTER_CUBIC)
     return out
 
 def random_crop_black(x,dn):
     dx = np.random.randint(dn,size=1)[0]
     dy = np.random.randint(dn,size=1)[0]
-    w = x.shape[0]
-    h = x.shape[1]
+    
+    h = x.shape[0]
+    w = x.shape[1]
 
     dx_shift = np.random.randint(dn,size=1)[0]
     dy_shift = np.random.randint(dn,size=1)[0]
     out = x*0
-    out[0+dx_shift:w-(dn-dx_shift),0+dy_shift:h-(dn-dy_shift),:] = x[0+dx:w-(dn-dx),0+dy:h-(dn-dy),:]
+    out[0+dy_shift:h-(dn-dy_shift),0+dx_shift:w-(dn-dx_shift),:] = x[0+dy:h-(dn-dy),0+dx:w-(dn-dx),:]
     
     return out
 
 def random_crop_white(x,dn):
     dx = np.random.randint(dn,size=1)[0]
     dy = np.random.randint(dn,size=1)[0]
-    w = x.shape[0]
-    h = x.shape[1]
+    h = x.shape[0]
+    w = x.shape[1]
 
     dx_shift = np.random.randint(dn,size=1)[0]
     dy_shift = np.random.randint(dn,size=1)[0]
     out = x*0+255
-    out[0+dx_shift:w-(dn-dx_shift),0+dy_shift:h-(dn-dy_shift),:] = x[0+dx:w-(dn-dx),0+dy:h-(dn-dy),:]
+    out[0+dy_shift:h-(dn-dy_shift),0+dx_shift:w-(dn-dx_shift),:] = x[0+dy:h-(dn-dy),0+dx:w-(dn-dx),:]
     
     return out
 
