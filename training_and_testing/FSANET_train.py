@@ -1,24 +1,27 @@
-import pandas as pd
+import os
+import sys
+sys.path.append('..')
 import logging
 import argparse
-import os
-from keras.callbacks import LearningRateScheduler, ModelCheckpoint
-from keras.optimizers import SGD, Adam
-from keras.utils import np_utils
-from FSANET_model import *
-import sys
+import pandas as pd
 import numpy as np
-from keras.preprocessing.image import ImageDataGenerator
-import TYY_callbacks
-from keras.preprocessing.image import ImageDataGenerator
-from TYY_generators import *
-from keras.utils import plot_model
-logging.basicConfig(level=logging.DEBUG)
 
+from lib.FSANET_model import *
+from lib.SSRNET_model import *
+
+import TYY_callbacks
+from TYY_generators import *
+
+from keras.utils import np_utils
+from keras.utils import plot_model
+from keras.optimizers import SGD, Adam
+from keras.preprocessing.image import ImageDataGenerator
+from keras.callbacks import LearningRateScheduler, ModelCheckpoint
+
+logging.basicConfig(level=logging.DEBUG)
 
 def load_data_npz(npz_path):
     d = np.load(npz_path)
-
     return d["image"], d["pose"]
 
 def mk_dir(dir):

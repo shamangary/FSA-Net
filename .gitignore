@@ -1,0 +1,6 @@
+env
+demo/img
+__pycache__
+.vscode
+data
+training_and_testing/300W_*

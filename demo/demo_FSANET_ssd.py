@@ -1,10 +1,11 @@
 import os
 import cv2
 import sys
+sys.path.append('..')
 import numpy as np
 from math import cos, sin
 # from moviepy.editor import *
-from FSANET_model import *
+from lib.FSANET_model import *
 import numpy as np
 # from moviepy.editor import *
 # from mtcnn.mtcnn import MTCNN
