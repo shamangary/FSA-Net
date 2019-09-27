@@ -3,7 +3,12 @@
 
 **Code Author: Tsun-Yi Yang**
 
-**Last update: 2019/08/30 (Demo update! Robust and fast SSD face detector added!)**
+**\[Updates\]**
+
+ - `2019/09/27`: Refactoring the model code. Very beautiful and concise codes contributed by [Kapil Sachdeva](https://github.com/ksachdeva).
+ - `2019/08/30`: Demo update! Robust and fast SSD face detector added!
+
+
 
 ### Comparison video
 (Baseline **Hopenet:** https://github.com/natanielruiz/deep-head-pose)
