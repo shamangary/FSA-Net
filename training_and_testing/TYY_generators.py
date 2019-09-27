@@ -2,6 +2,7 @@ import keras
 import numpy as np
 import sys
 import tensorflow as tf
+import cv2
 
 
 def random_crop(x,dn):
