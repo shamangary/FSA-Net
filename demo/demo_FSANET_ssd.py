@@ -7,6 +7,7 @@ from math import cos, sin
 # from moviepy.editor import *
 from lib.FSANET_model import *
 import numpy as np
+from keras.layers import Average
 # from moviepy.editor import *
 # from mtcnn.mtcnn import MTCNN
 
