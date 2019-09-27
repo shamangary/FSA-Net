@@ -196,32 +196,32 @@ sh run_demo_FSANET_ssd.sh
 ### Modules explanation:
 
 1. ssr_G_model_build:
-https://github.com/shamangary/FSA-Net/blob/master/training_and_testing/FSANET_model.py#L672
+https://github.com/shamangary/FSA-Net/blob/master/lib/FSANET_model.py#L66
 
 + Two-stream structure for extracting the features.
 
 2. ssr_feat_S_model_build:
-https://github.com/shamangary/FSA-Net/blob/master/training_and_testing/FSANET_model.py#L765
+https://github.com/shamangary/FSA-Net/blob/master/lib/FSANET_model.py#L191
 
 + Generating fine-grained structure mapping from different scoring functions.
 
 3. ssr_S_model_build:
-https://github.com/shamangary/FSA-Net/blob/master/training_and_testing/FSANET_model.py#L778
+https://github.com/shamangary/FSA-Net/blob/master/lib/FSANET_model.py#L208
 
 + Apply the mapping on to the features and generate primary capsules.
 
-4. ssr_Cap_model_build:
-https://github.com/shamangary/FSA-Net/blob/master/training_and_testing/FSANET_model.py#L820
+4. ssr_aggregation_model_build:
+https://github.com/shamangary/FSA-Net/blob/master/lib/FSANET_model.py#L295
 
 + Feed the primary capsules into capsule layer and output the final aggregated capsule features. And divide them into 3 stages.
 
 5. ssr_F_model_build:
-https://github.com/shamangary/FSA-Net/blob/master/training_and_testing/FSANET_model.py#L846
+https://github.com/shamangary/FSA-Net/blob/master/lib/FSANET_model.py#L144
 
 + Taking the previous 3 stages features for Soft-Stagewise Regression (SSR) module. Each stage further splits into three parts: prediction, dynamic index shifting, and dynamic scaling. This part please check the '[IJCAI18] SSR-Net' for more detail explanation.
 
 6. SSR_module:
-https://github.com/shamangary/FSA-Net/blob/master/training_and_testing/FSANET_model.py#L891
+https://github.com/shamangary/FSA-Net/blob/master/lib/FSANET_model.py#L116
 
 + Taking the prediction, dynamic index shifting, and dynamic scaling for the final regression output.
 In this case, there are three outputs (yaw, pitch, roll).
