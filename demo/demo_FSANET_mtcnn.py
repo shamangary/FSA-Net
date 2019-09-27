@@ -81,10 +81,8 @@ def draw_results_mtcnn(detected, input_img, faces, ad, img_size, img_w, img_h, m
 
                 input_img[yw1:yw2 + 1, xw1:xw2 + 1, :] = img
 
-                cv2.imshow("result", input_img)
-    else:
-        cv2.imshow("result", input_img)
-
+    cv2.imshow("result", input_img)
+    
     return input_img  # ,time_network,time_plot
 
 
