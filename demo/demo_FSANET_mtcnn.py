@@ -6,7 +6,7 @@ sys.path.append('..')
 
 import numpy as np
 from math import cos, sin
-from moviepy.editor import *
+# from moviepy.editor import *
 from lib.FSANET_model import *
 from mtcnn.mtcnn import MTCNN
 
