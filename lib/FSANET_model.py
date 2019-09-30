@@ -89,6 +89,27 @@ class SSRLayer(Layer):
         return dict(list(base_config.items()) + list(config.items()))
 
 
+class FeatSliceLayer(Layer):
+    def __init__(self, start_index, end_index,  **kwargs):
+        super(FeatSliceLayer, self).__init__(**kwargs)
+        self.start_index = start_index
+        self.end_index = end_index
+        self.trainable = False
+
+    def call(self, inputs):    
+        return inputs[:,self.start_index:self.end_index]
+
+    def compute_output_shape(self, input_shape):
+        return (input_shape[0], self.end_index - self.start_index)
+
+    def get_config(self):
+        config = {
+            'start_index': self.start_index,
+            'end_index': self.end_index
+        }
+        base_config = super(FeatSliceLayer, self).get_config()
+        return dict(list(base_config.items()) + list(config.items()))
+
 
 class BaseFSANet(object):
     def __init__(self, image_size,num_classes,stage_num,lambda_d, S_set):
@@ -180,14 +201,14 @@ class BaseFSANet(object):
         input_s2_pre = Input((feat_dim,))
         input_s3_pre = Input((feat_dim,))
 
-        def _process_input(stage_index, stage_num, num_classes, input_s_pre):
-            feat_delta_s = Lambda(lambda x: x[:,0:4])(input_s_pre)
-            delta_s = Dense(num_classes,activation='tanh',name=f'delta_s{stage_index}')(feat_delta_s)
-
-            feat_local_s = Lambda(lambda x: x[:,4:8])(input_s_pre)
+        def _process_input(stage_index, stage_num, num_classes, input_s_pre):            
+            feat_delta_s = FeatSliceLayer(0,4)(input_s_pre)            
+            delta_s = Dense(num_classes,activation='tanh',name=f'delta_s{stage_index}')(feat_delta_s)            
+            
+            feat_local_s = FeatSliceLayer(4,8)(input_s_pre)            
             local_s = Dense(units=num_classes, activation='tanh', name=f'local_delta_stage{stage_index}')(feat_local_s)
-
-            feat_pred_s = Lambda(lambda x: x[:,8:16])(input_s_pre)
+            
+            feat_pred_s = FeatSliceLayer(8,16)(input_s_pre)            
             feat_pred_s = Dense(stage_num*num_classes,activation='relu')(feat_pred_s) 
             pred_s = Reshape((num_classes,stage_num))(feat_pred_s)
 
