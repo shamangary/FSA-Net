@@ -13,6 +13,7 @@ from keras.layers import Layer
 from keras.layers import Lambda
 from keras.layers import Reshape
 from keras.layers import Multiply
+from keras.layers import Flatten
 from keras.layers import Activation
 from keras.layers import Concatenate
 from keras.layers import MaxPooling2D
@@ -109,6 +110,18 @@ class FeatSliceLayer(Layer):
         }
         base_config = super(FeatSliceLayer, self).get_config()
         return dict(list(base_config.items()) + list(config.items()))
+
+class MomentsLayer(Layer):
+    def __init__(self, **kwargs):
+        super(MomentsLayer,self).__init__(**kwargs)
+        self.trainable = False
+
+    def call(self, inputs):        
+        _, var = tf.nn.moments(inputs,axes=-1)
+        return var
+
+    def compute_output_shape(self, input_shape):
+        return (input_shape[0], input_shape[-1])
 
 
 class BaseFSANet(object):
@@ -244,17 +257,14 @@ class BaseFSANet(object):
         return Model(inputs=[input_s1_pre,input_s2_pre,input_s3_pre],outputs=[pred_s1,pred_s2,pred_s3,delta_s1,delta_s2,delta_s3,local_s1,local_s2,local_s3], name=name_F)
 
     def ssr_feat_S_model_build(self, m_dim):
-        input_preS = Input((8,8,64))
-        def var(x):
-            mean, var = tf.nn.moments(x,axes=-1)
-            return var
+        input_preS = Input((8,8,64))        
 
         if self.is_varS_model:
-            feat_preS = Lambda(var)(input_preS)
+            feat_preS = MomentsLayer()(input_preS)
         else:
             feat_preS = Conv2D(1,(1,1),padding='same',activation='sigmoid')(input_preS)        
 
-        feat_preS = Reshape((-1,))(feat_preS)
+        feat_preS = Reshape((-1,))(feat_preS)        
         SR_matrix = Dense(m_dim*(8*8+8*8+8*8),activation='sigmoid')(feat_preS)
         SR_matrix = Reshape((m_dim,(8*8+8*8+8*8)))(SR_matrix)
         
