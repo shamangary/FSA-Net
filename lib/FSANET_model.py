@@ -159,6 +159,18 @@ class MatrixNormLayer(Layer):
         base_config = super(MatrixNormLayer, self).get_config()
         return dict(list(base_config.items()) + list(config.items()))
 
+class PrimCapsLayer(Layer):
+    def __init__(self, **kwargs):
+        super(PrimCapsLayer,self).__init__(**kwargs)
+        self.trainable = False        
+
+    def call(self, inputs):                
+        x1, x2, norm = inputs
+        return tf.matmul(x1,x2) / norm
+
+    def compute_output_shape(self, input_shapes):                
+        return input_shapes[-1]
+
 
 class BaseFSANet(object):
     def __init__(self, image_size,num_classes,stage_num,lambda_d, S_set):
@@ -331,18 +343,20 @@ class BaseFSANet(object):
         norm_S_s2 = MatrixNormLayer(tile_count=64)(S_matrix_s2)
         norm_S_s3 = MatrixNormLayer(tile_count=64)(S_matrix_s3)        
 
-        feat_s1_pre = Reshape((-1,64))(input_s1_preS)
-        feat_s2_pre = Reshape((-1,64))(input_s2_preS)
-        feat_s3_pre = Reshape((-1,64))(input_s3_preS)
+        feat_s1_pre = Reshape((8*8,64))(input_s1_preS)
+        feat_s2_pre = Reshape((8*8,64))(input_s2_preS)
+        feat_s3_pre = Reshape((8*8,64))(input_s3_preS)
+
         feat_pre_concat = Concatenate(axis=1)([feat_s1_pre, feat_s2_pre, feat_s3_pre])
         
         # Warining: don't use keras's 'K.dot'. It is very weird when high dimension is used.
         # https://github.com/keras-team/keras/issues/9779
         # Make sure 'tf.matmul' is used
-        # primcaps = Lambda(lambda x: tf.matmul(x[0],x[1])/x[2])([S_matrix,feat_pre_concat, norm_S])
-        primcaps_s1 = Lambda(lambda x: tf.matmul(x[0],x[1])/x[2])([S_matrix_s1,feat_pre_concat, norm_S_s1])
-        primcaps_s2 = Lambda(lambda x: tf.matmul(x[0],x[1])/x[2])([S_matrix_s2,feat_pre_concat, norm_S_s2])
-        primcaps_s3 = Lambda(lambda x: tf.matmul(x[0],x[1])/x[2])([S_matrix_s3,feat_pre_concat, norm_S_s3])
+        # primcaps = Lambda(lambda x: tf.matmul(x[0],x[1])/x[2])([S_matrix,feat_pre_concat, norm_S])        
+        primcaps_s1 = PrimCapsLayer()([S_matrix_s1,feat_pre_concat, norm_S_s1])
+        primcaps_s2 = PrimCapsLayer()([S_matrix_s2,feat_pre_concat, norm_S_s2])
+        primcaps_s3 = PrimCapsLayer()([S_matrix_s3,feat_pre_concat, norm_S_s3])        
+        
         primcaps = Concatenate(axis=1)([primcaps_s1,primcaps_s2,primcaps_s3])
 
         return Model(inputs=[input_s1_preS, input_s2_preS, input_s3_preS],outputs=primcaps, name='ssr_S_model')
