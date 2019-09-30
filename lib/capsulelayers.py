@@ -18,6 +18,8 @@ import keras.backend as K
 from keras import initializers
 from keras.layers import Layer
 
+from .utils import register_keras_custom_object
+
 
 def batch_dot(x, y, axes=None):
     """Batchwise dot product.
@@ -127,6 +129,7 @@ def squash(vectors, axis=-1):
     return scale * vectors
 
 
+@register_keras_custom_object
 class CapsuleLayer(Layer):
     """
     The capsule layer. It is similar to Dense layer. Dense layer has `in_num` inputs, each is a scalar, the output of the 
@@ -224,6 +227,7 @@ class CapsuleLayer(Layer):
         return dict(list(base_config.items()) + list(config.items()))
 
 
+@register_keras_custom_object
 class MatMulLayer(Layer):
 
     def __init__(self, output_dim, type, **kwargs):

@@ -27,6 +27,8 @@ from .capsulelayers import MatMulLayer
 
 from .loupe_keras import NetVLAD
 
+from .utils import register_keras_custom_object
+
 sys.setrecursionlimit(2 ** 20)
 np.random.seed(2 ** 10)
 
@@ -35,13 +37,15 @@ np.random.seed(2 ** 10)
 # can be converted to various other formats. Usage of Lambda layers prevent the convertion
 # and the optimizations by the underlying math engine (tensorflow in this case)
 
+@register_keras_custom_object
 class SSRLayer(Layer):
     def __init__(self, s1, s2, s3, lambda_d, **kwargs):
-        super(SSRLayer, self).__init__(trainable=False, **kwargs)
+        super(SSRLayer, self).__init__(**kwargs)
         self.s1 = s1
         self.s2 = s2
         self.s3 = s3
         self.lambda_d = lambda_d
+        self.trainable = False
 
     def call(self, inputs):
         x = inputs
@@ -88,7 +92,7 @@ class SSRLayer(Layer):
         base_config = super(SSRLayer, self).get_config()
         return dict(list(base_config.items()) + list(config.items()))
 
-
+@register_keras_custom_object
 class FeatSliceLayer(Layer):
     def __init__(self, start_index, end_index,  **kwargs):
         super(FeatSliceLayer, self).__init__(**kwargs)
@@ -110,6 +114,7 @@ class FeatSliceLayer(Layer):
         base_config = super(FeatSliceLayer, self).get_config()
         return dict(list(base_config.items()) + list(config.items()))
 
+@register_keras_custom_object
 class MomentsLayer(Layer):
     def __init__(self, **kwargs):
         super(MomentsLayer,self).__init__(**kwargs)
@@ -122,6 +127,7 @@ class MomentsLayer(Layer):
     def compute_output_shape(self, input_shape):
         return (input_shape[0], input_shape[-1])
 
+@register_keras_custom_object
 class MatrixMultiplyLayer(Layer):
     def __init__(self, **kwargs):
         super(MatrixMultiplyLayer,self).__init__(**kwargs)
@@ -137,6 +143,7 @@ class MatrixMultiplyLayer(Layer):
     def compute_output_shape(self, input_shapes):        
         return (input_shapes[0][0],input_shapes[0][1], input_shapes[1][-1])
 
+@register_keras_custom_object
 class MatrixNormLayer(Layer):
     def __init__(self, tile_count,  **kwargs):
         super(MatrixNormLayer,self).__init__(**kwargs)
@@ -158,6 +165,7 @@ class MatrixNormLayer(Layer):
         base_config = super(MatrixNormLayer, self).get_config()
         return dict(list(base_config.items()) + list(config.items()))
 
+@register_keras_custom_object
 class PrimCapsLayer(Layer):
     def __init__(self, **kwargs):
         super(PrimCapsLayer,self).__init__(**kwargs)
@@ -170,6 +178,7 @@ class PrimCapsLayer(Layer):
     def compute_output_shape(self, input_shapes):                
         return input_shapes[-1]
 
+@register_keras_custom_object
 class AggregatedFeatureExtractionLayer(Layer):
     def __init__(self, num_capsule,  **kwargs):
         super(AggregatedFeatureExtractionLayer,self).__init__(**kwargs)
