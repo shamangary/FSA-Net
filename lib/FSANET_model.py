@@ -33,8 +33,7 @@ sys.setrecursionlimit(2 ** 20)
 np.random.seed(2 ** 10)
 
 # Custom layers
-# Note - we use Lambda layers so that the model (weights)
-# can be converted to various other formats. Usage of Lambda layers prevent the convertion
+# Note - Usage of Lambda layers prevent the convertion
 # and the optimizations by the underlying math engine (tensorflow in this case)
 
 @register_keras_custom_object
@@ -235,6 +234,7 @@ class BaseFSANet(object):
         self.m_dim = S_set[4]
 
         self.F_shape = int(self.num_capsule/3)*self.dim_capsule
+        self.map_xy_size = int(8*image_size/64)
 
         self.is_fc_model = False
         self.is_noS_model = False
@@ -344,7 +344,7 @@ class BaseFSANet(object):
         return Model(inputs=[input_s1_pre,input_s2_pre,input_s3_pre],outputs=[pred_s1,pred_s2,pred_s3,delta_s1,delta_s2,delta_s3,local_s1,local_s2,local_s3], name=name_F)
 
     def ssr_feat_S_model_build(self, m_dim):
-        input_preS = Input((8,8,64))        
+        input_preS = Input((self.map_xy_size,self.map_xy_size,64))        
 
         if self.is_varS_model:
             feat_preS = MomentsLayer()(input_preS)
@@ -352,15 +352,15 @@ class BaseFSANet(object):
             feat_preS = Conv2D(1,(1,1),padding='same',activation='sigmoid')(input_preS)        
 
         feat_preS = Reshape((-1,))(feat_preS)        
-        SR_matrix = Dense(m_dim*(8*8+8*8+8*8),activation='sigmoid')(feat_preS)
-        SR_matrix = Reshape((m_dim,(8*8+8*8+8*8)))(SR_matrix)
+        SR_matrix = Dense(m_dim*(self.map_xy_size*self.map_xy_size*3),activation='sigmoid')(feat_preS)
+        SR_matrix = Reshape((m_dim,(self.map_xy_size*self.map_xy_size*3)))(SR_matrix)
         
         return Model(inputs=input_preS,outputs=[SR_matrix,feat_preS],name='feat_S_model')
 
     def ssr_S_model_build(self, num_primcaps, m_dim):
-        input_s1_preS = Input((8,8,64))
-        input_s2_preS = Input((8,8,64))
-        input_s3_preS = Input((8,8,64))
+        input_s1_preS = Input((self.map_xy_size,self.map_xy_size,64))
+        input_s2_preS = Input((self.map_xy_size,self.map_xy_size,64))
+        input_s3_preS = Input((self.map_xy_size,self.map_xy_size,64))
 
         feat_S_model = self.ssr_feat_S_model_build(m_dim)
 
@@ -382,9 +382,9 @@ class BaseFSANet(object):
         norm_S_s2 = MatrixNormLayer(tile_count=64)(S_matrix_s2)
         norm_S_s3 = MatrixNormLayer(tile_count=64)(S_matrix_s3)        
 
-        feat_s1_pre = Reshape((8*8,64))(input_s1_preS)
-        feat_s2_pre = Reshape((8*8,64))(input_s2_preS)
-        feat_s3_pre = Reshape((8*8,64))(input_s3_preS)
+        feat_s1_pre = Reshape((self.map_xy_size*self.map_xy_size,64))(input_s1_preS)
+        feat_s2_pre = Reshape((self.map_xy_size*self.map_xy_size,64))(input_s2_preS)
+        feat_s3_pre = Reshape((self.map_xy_size*self.map_xy_size,64))(input_s3_preS)
 
         feat_pre_concat = Concatenate(axis=1)([feat_s1_pre, feat_s2_pre, feat_s3_pre])
         
@@ -400,14 +400,15 @@ class BaseFSANet(object):
 
         return Model(inputs=[input_s1_preS, input_s2_preS, input_s3_preS],outputs=primcaps, name='ssr_S_model')
 
-    def ssr_noS_model_build(self, **kwargs):
-        input_s1_preS = Input((8,8,64))
-        input_s2_preS = Input((8,8,64))
-        input_s3_preS = Input((8,8,64))
+    def ssr_noS_model_build(self, **kwargs):        
 
-        primcaps_s1 = Reshape((8*8,64))(input_s1_preS)
-        primcaps_s2 = Reshape((8*8,64))(input_s2_preS)
-        primcaps_s3 = Reshape((8*8,64))(input_s3_preS)
+        input_s1_preS = Input((self.map_xy_size,self.map_xy_size,64))
+        input_s2_preS = Input((self.map_xy_size,self.map_xy_size,64))
+        input_s3_preS = Input((self.map_xy_size,self.map_xy_size,64))
+
+        primcaps_s1 = Reshape((self.map_xy_size*self.map_xy_size,64))(input_s1_preS)
+        primcaps_s2 = Reshape((self.map_xy_size*self.map_xy_size,64))(input_s2_preS)
+        primcaps_s3 = Reshape((self.map_xy_size*self.map_xy_size,64))(input_s3_preS)
 
         primcaps = Concatenate(axis=1)([primcaps_s1,primcaps_s2,primcaps_s3])
         return Model(inputs=[input_s1_preS, input_s2_preS, input_s3_preS],outputs=primcaps, name='ssr_S_model')
