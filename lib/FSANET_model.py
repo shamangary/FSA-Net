@@ -138,6 +138,27 @@ class MatrixMultiplyLayer(Layer):
     def compute_output_shape(self, input_shapes):        
         return (input_shapes[0][0],input_shapes[0][1], input_shapes[1][-1])
 
+class MatrixNormLayer(Layer):
+    def __init__(self, tile_count,  **kwargs):
+        super(MatrixNormLayer,self).__init__(**kwargs)
+        self.trainable = False
+        self.tile_count = tile_count
+
+    def call(self, input):                
+        sum = K.sum(input,axis=-1,keepdims=True)        
+        tiled = K.tile(sum,(1,1,self.tile_count))        
+        return tiled
+
+    def compute_output_shape(self, input_shape):        
+        return (input_shape[0], input_shape[1], self.tile_count)
+
+    def get_config(self):
+        config = {
+            'tile_count': self.tile_count
+        }
+        base_config = super(MatrixNormLayer, self).get_config()
+        return dict(list(base_config.items()) + list(config.items()))
+
 
 class BaseFSANet(object):
     def __init__(self, image_size,num_classes,stage_num,lambda_d, S_set):
@@ -300,16 +321,15 @@ class BaseFSANet(object):
         SL_matrix = Dense(int(num_primcaps/3)*m_dim,activation='sigmoid')(feat_pre_concat)
         SL_matrix = Reshape((int(num_primcaps/3),m_dim))(SL_matrix)       
 
-
         S_matrix_s1 = MatrixMultiplyLayer(name="S_matrix_s1")([SL_matrix,SR_matrix_s1])
         S_matrix_s2 = MatrixMultiplyLayer(name='S_matrix_s2')([SL_matrix,SR_matrix_s2])
         S_matrix_s3 = MatrixMultiplyLayer(name='S_matrix_s3')([SL_matrix,SR_matrix_s3])        
 
-        # Very important!!! Without this training won't converge.
-        # norm_S = Lambda(lambda x: K.tile(K.sum(x,axis=-1,keepdims=True),(1,1,64)))(S_matrix)
-        norm_S_s1 = Lambda(lambda x: K.tile(K.sum(x,axis=-1,keepdims=True),(1,1,64)))(S_matrix_s1)
-        norm_S_s2 = Lambda(lambda x: K.tile(K.sum(x,axis=-1,keepdims=True),(1,1,64)))(S_matrix_s2)
-        norm_S_s3 = Lambda(lambda x: K.tile(K.sum(x,axis=-1,keepdims=True),(1,1,64)))(S_matrix_s3)
+        # Very important!!! Without this training won't converge.        
+        # norm_S_s1 = Lambda(lambda x: K.tile(K.sum(x,axis=-1,keepdims=True),(1,1,64)))(S_matrix_s1)
+        norm_S_s1 = MatrixNormLayer(tile_count=64)(S_matrix_s1)
+        norm_S_s2 = MatrixNormLayer(tile_count=64)(S_matrix_s2)
+        norm_S_s3 = MatrixNormLayer(tile_count=64)(S_matrix_s3)        
 
         feat_s1_pre = Reshape((-1,64))(input_s1_preS)
         feat_s2_pre = Reshape((-1,64))(input_s2_preS)
