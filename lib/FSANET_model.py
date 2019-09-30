@@ -9,6 +9,7 @@ from keras.models import Model
 from keras.layers import Input
 from keras.layers import Dense
 from keras.layers import Conv2D
+from keras.layers import Layer
 from keras.layers import Lambda
 from keras.layers import Reshape
 from keras.layers import Multiply
@@ -29,16 +30,77 @@ from .loupe_keras import NetVLAD
 sys.setrecursionlimit(2 ** 20)
 np.random.seed(2 ** 10)
 
+# Custom layers
+# Note - we use Lambda layers so that the model (weights)
+# can be converted to various other formats. Usage of Lambda layers prevent the convertion
+# and the optimizations by the underlying math engine (tensorflow in this case)
+
+class SSRLayer(Layer):
+    def __init__(self, s1, s2, s3, lambda_d, **kwargs):
+        super(SSRLayer, self).__init__(trainable=False, **kwargs)
+        self.s1 = s1
+        self.s2 = s2
+        self.s3 = s3
+        self.lambda_d = lambda_d
+
+    def call(self, inputs):
+        x = inputs
+
+        a = x[0][:, :, 0] * 0
+        b = x[0][:, :, 0] * 0
+        c = x[0][:, :, 0] * 0
+
+        s1 = self.s1
+        s2 = self.s2
+        s3 = self.s3
+        lambda_d = self.lambda_d
+
+        di = s1 // 2
+        dj = s2 // 2
+        dk = s3 // 2
+
+        V = 99
+
+        for i in range(0, s1):
+            a = a + (i - di + x[6]) * x[0][:, :, i]
+        a = a / (s1 * (1 + lambda_d * x[3]))
+
+        for j in range(0, s2):
+            b = b + (j - dj + x[7]) * x[1][:, :, j]
+        b = b / (s1 * (1 + lambda_d * x[3])) / (s2 * (1 + lambda_d * x[4]))
+
+        for k in range(0, s3):
+            c = c + (k - dk + x[8]) * x[2][:, :, k]
+        c = c / (s1 * (1 + lambda_d * x[3])) / (s2 * (1 + lambda_d * x[4])) / (
+            s3 * (1 + lambda_d * x[5]))
+
+        pred = (a + b + c) * V
+
+        return pred
+
+    def get_config(self):
+        config = {
+            's1': self.s1,
+            's2': self.s2,
+            's3': self.s3,
+            'lambda_d': self.lambda_d
+        }
+        base_config = super(SSRLayer, self).get_config()
+        return dict(list(base_config.items()) + list(config.items()))
+
+
+
 class BaseFSANet(object):
     def __init__(self, image_size,num_classes,stage_num,lambda_d, S_set):
-        if K.image_dim_ordering() == "th":
-            logging.debug("image_dim_ordering = 'th'")
-            self._channel_axis = 1
+        self._channel_axis = 3 if K.image_data_format() == 'channels_last' else 1
+
+        if self._channel_axis == 1:
+            logging.debug("image_dim_ordering = 'th'")            
             self._input_shape = (3, image_size, image_size)
         else:
             logging.debug("image_dim_ordering = 'tf'")
-            self._channel_axis = -1
-            self._input_shape = (image_size, image_size, 3)
+            self._input_shape = (image_size, image_size, 3)           
+
 
         self.num_classes = num_classes
         self.stage_num = stage_num
@@ -112,34 +174,6 @@ class BaseFSANet(object):
         feat_s3_pre = AveragePooling2D((2,2))(feat_s3_pre) # make sure (8x8x64) feature maps 
     
         return Model(inputs=img_inputs,outputs=[feat_s1_pre,feat_s2_pre,feat_s3_pre], name='ssr_G_model')
-
-    def SSR_module(self, x,s1,s2,s3,lambda_d):
-        a = x[0][:,:,0]*0
-        b = x[0][:,:,0]*0
-        c = x[0][:,:,0]*0
-
-        di = s1//2
-        dj = s2//2
-        dk = s3//2
-
-        V = 99
-        #lambda_d = 0.9
-
-        for i in range(0,s1):
-            a = a+(i-di+x[6])*x[0][:,:,i]
-        a = a/(s1*(1+lambda_d*x[3]))
-
-        for j in range(0,s2):
-            b = b+(j-dj+x[7])*x[1][:,:,j]
-        b = b/(s1*(1+lambda_d*x[3]))/(s2*(1+lambda_d*x[4]))
-
-        for k in range(0,s3):
-            c = c+(k-dk+x[8])*x[2][:,:,k]
-        c = c/(s1*(1+lambda_d*x[3]))/(s2*(1+lambda_d*x[4]))/(s3*(1+lambda_d*x[5]))
-
-        pred = (a+b+c)*V
-        
-        return pred
 
     def ssr_F_model_build(self, feat_dim, name_F):
         input_s1_pre = Input((feat_dim,))
@@ -275,14 +309,15 @@ class BaseFSANet(object):
         if self.is_fc_model:
             ssr_F_Cap_model = self.ssr_FC_model_build(self.F_shape,'ssr_F_Cap_model')
         else:    
-            ssr_F_Cap_model = self.ssr_F_model_build(self.F_shape,'ssr_F_Cap_model')
+            ssr_F_Cap_model = self.ssr_F_model_build(self.F_shape,'ssr_F_Cap_model')        
 
         # Wire them up
         ssr_G_list = ssr_G_model(img_inputs)
         ssr_primcaps = ssr_S_model(ssr_G_list)
         ssr_Cap_list = ssr_aggregation_model(ssr_primcaps)
         ssr_F_Cap_list = ssr_F_Cap_model(ssr_Cap_list)
-        pred_pose = Lambda(self.SSR_module,arguments={'s1':self.stage_num[0],'s2':self.stage_num[1],'s3':self.stage_num[2],'lambda_d':self.lambda_d},name='pred_pose')(ssr_F_Cap_list)
+
+        pred_pose = SSRLayer(s1=self.stage_num[0], s2=self.stage_num[1], s3=self.stage_num[2], lambda_d=self.lambda_d, name="pred_pose")(ssr_F_Cap_list)        
         
         return Model(inputs=img_inputs, outputs=pred_pose)
 
@@ -293,8 +328,8 @@ class BaseCapsuleFSANet(BaseFSANet):
         super(BaseCapsuleFSANet, self).__init__(image_size,num_classes,stage_num,lambda_d, S_set)         
 
     def ssr_aggregation_model_build(self, shape_primcaps):
-        input_primcaps = Input(shape_primcaps)
-        capsule = CapsuleLayer(self.num_capsule, self.dim_capsule, self.routings, name='caps')(input_primcaps)
+        input_primcaps = Input(shape_primcaps)        
+        capsule = CapsuleLayer(self.num_capsule, self.dim_capsule, routings=self.routings, name='caps')(input_primcaps)
 
         s1_a = 0
         s1_b = self.num_capsule//3
