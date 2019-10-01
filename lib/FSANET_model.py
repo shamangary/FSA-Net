@@ -81,6 +81,9 @@ class SSRLayer(Layer):
 
         return pred
 
+    def compute_output_shape(self, input_shape):
+        return (input_shape[0], 3)
+
     def get_config(self):
         config = {
             's1': self.s1,
