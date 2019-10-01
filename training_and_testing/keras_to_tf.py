@@ -8,9 +8,7 @@ sys.path.append('..')
 import tensorflow as tf
 from keras import backend as K
 from keras.models import load_model
-
 from tensorflow.python.framework.graph_util import convert_variables_to_constants
-
 from lib.FSANET_model import *
 
 def freeze_session(session, keep_var_names=None, output_names=None, clear_devices=True):
@@ -136,6 +134,9 @@ def main(args):
     model_cls_name = build_model_class_from_name(model_name)
 
     model_obj = create_model(model_name, model_cls_name)
+    # need to load the weights first
+    model_obj.load_weights(os.path.join(
+        args.trained_model_dir_path, model_name + ".h5"))
 
     # we now save it in the temp folder
     # this version will now be saved with the custom layer information
@@ -150,15 +151,19 @@ def main(args):
 
     model_obj.save(keras_model_path)
 
+    # Do the session clearing and creation first
+    K.clear_session()
+    sess = K.get_session()
     K.set_learning_phase(0)
 
+    # Load it back
     model = load_model(keras_model_path)
 
     print(f"Model inputs information - {model.inputs}")
     print(f"Model outputs information - {model.outputs}")
 
     # freez the graph
-    frozen_graph = freeze_session(K.get_session(),
+    frozen_graph = freeze_session(sess,
                                   output_names=[out.op.name for out in model.outputs])
 
     tf_dir_path = os.path.join(args.output_dir_path, "converted-models", "tf")
@@ -166,7 +171,7 @@ def main(args):
 
     # write the graph
     tf.io.write_graph(frozen_graph, tf_dir_path,
-                         f"{model_name}.pb", as_text=False)
+                      f"{model_name}.pb", as_text=False)
 
 
 if __name__ == '__main__':
