@@ -191,7 +191,14 @@ cd demo
 sh run_demo_FSANET_ssd.sh
 ```
 
+### 4. Conversion to tensorflow frozen graph
 
+```bash
+cd training_and_testing
+python keras_to_tf.py --trained-model-dir-path ../pre-trained/300W_LP_models/fsanet_var_capsule_3_16_2_21_5 --output-dir-path <your_output_dir>
+```
+
+Above command will generate the tensorflow frozen graph in <your_output_dir>/converted-models/tf/fsanet_var_capsule_3_16_2_21_5.pb
 
 ### Modules explanation:
 
