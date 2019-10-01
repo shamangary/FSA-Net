@@ -346,12 +346,14 @@ class BaseFSANet(object):
     def ssr_feat_S_model_build(self, m_dim):
         input_preS = Input((self.map_xy_size,self.map_xy_size,64))        
 
+
         if self.is_varS_model:
             feat_preS = MomentsLayer()(input_preS)
         else:
             feat_preS = Conv2D(1,(1,1),padding='same',activation='sigmoid')(input_preS)        
 
         feat_preS = Reshape((-1,))(feat_preS)        
+
         SR_matrix = Dense(m_dim*(self.map_xy_size*self.map_xy_size*3),activation='sigmoid')(feat_preS)
         SR_matrix = Reshape((m_dim,(self.map_xy_size*self.map_xy_size*3)))(SR_matrix)
         
