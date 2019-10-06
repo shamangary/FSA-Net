@@ -4,7 +4,7 @@
 **Code Author: Tsun-Yi Yang**
 
 **\[Updates\]**
-
+ - `2019/10/06`: Big thanks to [Kapil Sachdeva](https://github.com/ksachdeva) again!!! The keras Lambda layers are replaced, and converting to tf frozen model is supported!
  - `2019/09/27`: Refactoring the model code. Very beautiful and concise codes contributed by [Kapil Sachdeva](https://github.com/ksachdeva).
  - `2019/08/30`: Demo update! Robust and fast SSD face detector added!
 
