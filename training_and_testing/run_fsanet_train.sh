@@ -1,7 +1,7 @@
 # Train on protocal 1
 # SSRNET_MT
-KERAS_BACKEND=tensorflow python FSANET_train.py --batch_size 16 --nb_epochs 90 --model_type 0 --db_name '300W_LP'
-KERAS_BACKEND=tensorflow python FSANET_train.py --batch_size 16 --nb_epochs 90 --model_type 1 --db_name '300W_LP'
+KERAS_BACKEND=tensorflow python FSANET_train.py --batch_size 8 --nb_epochs 90 --model_type 0 --db_name '300W_LP'
+KERAS_BACKEND=tensorflow python FSANET_train.py --batch_size 8 --nb_epochs 90 --model_type 1 --db_name '300W_LP'
 
 # FSANET_Capsule
 KERAS_BACKEND=tensorflow python FSANET_train.py --batch_size 16 --nb_epochs 90 --model_type 2 --db_name '300W_LP'
