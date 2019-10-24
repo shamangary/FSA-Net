@@ -24,7 +24,7 @@ mtcnn==0.0.9
 numpy==1.17.2
 opencv-python==4.1.1.26
 pandas==0.25.1
-Pillow==6.1.0
+Pillow==6.2.0
 proglog==0.1.9
 protobuf==3.9.1
 pydot==1.4.1
