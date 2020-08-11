@@ -233,3 +233,8 @@ https://github.com/shamangary/FSA-Net/blob/master/lib/FSANET_model.py#L444
 
 + Taking the prediction, dynamic index shifting, and dynamic scaling for the final regression output.
 In this case, there are three outputs (yaw, pitch, roll).
+
+
+## 3rd party implementation
++ https://github.com/aoru45/FSANet.Pytorch
++ https://github.com/omasaht/headpose-fsanet-pytorch
